@@ -267,7 +267,7 @@ function updateRider(dt) {
     vs = Math.min(vs, d > .35 ? Math.sqrt(2 * 2.3 * d) + .3 : 0);
     if (d < 32) R.tx = R.parkX; else R.tx = laneX(S);
   } else {
-    R.tx = R.pass ? .05 : R.filter ? 0 : laneX(S);
+    R.tx = R.pass ? .05 : R.filter ? 0 : (nxt && nxt.turn === 'R' && S.len - R.z < 45) ? -.3 : laneX(S);
   }
   const before = R.v;
   R.v = Math.max(0, R.v + clamp(vs - R.v, -5.5 * dt, 2.4 * dt));

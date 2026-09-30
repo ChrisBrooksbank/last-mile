@@ -22,7 +22,15 @@ function phoneScreen(c, W, H) {
     for (let i = -1; i < 8; i++) { c.beginPath(); c.moveTo(-10, 22 + i * 60 + off); c.lineTo(W + 10, 22 + i * 60 + off + (i % 2 ? 14 : -10)); c.stroke(); }
     c.lineWidth = 4; for (let i = 0; i < 5; i++) { c.beginPath(); c.moveTo(i * 52 - 6, 22); c.lineTo(i * 52 + 18, 22 + h); c.stroke(); }
     c.fillStyle = '#1c3a30'; c.fillRect(120, 60 + off * .5, 50, 36);
-    if (route) { c.strokeStyle = '#1fbf8f'; c.lineWidth = 6; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); c.moveTo(100, 22 + h - 30); c.lineTo(100, 22 + h * .55); c.lineTo(66 + Math.sin(t * .5) * 3, 22 + h * .4); c.lineTo(66, 40); c.stroke(); }
+    if (route) {
+      const S = world.street, nx = nav.queue[0], py = 22 + h - 34, parking = R.parkZ != null;
+      const rem = Math.max(0, parking ? R.parkZ - R.z : (S ? S.len - R.z : 100));
+      const ty = Math.max(92, py - 14 - Math.min(rem, 220) * .55);
+      c.strokeStyle = '#1fbf8f'; c.lineWidth = 6; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); c.moveTo(100, py);
+      if (parking) { c.lineTo(100, ty); c.stroke(); const sd = S.dest.side; c.fillStyle = '#ff5a5f'; c.beginPath(); c.arc(100 + sd * 9, ty, 7, 0, TAU); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.arc(100 + sd * 9, ty, 2.5, 0, TAU); c.fill(); }
+      else if (nx && nx.turn !== 'S') { const sg = nx.turn === 'L' ? -1 : 1; c.lineTo(100, ty); c.lineTo(100 + sg * 22, ty - 22); c.lineTo(100 + sg * 22, 40); c.stroke(); }
+      else { c.lineTo(100, 40); c.stroke(); }
+    }
     c.restore();
     const py = route ? 22 + h - 34 : 22 + h * .55, pr = 7 + Math.sin(t * 3) * 1.5;
     c.fillStyle = 'rgba(70,150,255,.25)'; c.beginPath(); c.arc(100, py, pr * 2.2, 0, TAU); c.fill();
