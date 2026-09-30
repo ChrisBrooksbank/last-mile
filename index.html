@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Last Mile — a London delivery ride</title>
+<meta name="description" content="An endless, procedurally generated first-person shift as a London food-delivery rider.">
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,"Segoe UI",Roboto,sans-serif;color:#fff}
+  canvas{display:block;position:fixed;inset:0;width:100%;height:100%}
+  #hud{position:fixed;left:18px;top:14px;font-size:14px;letter-spacing:.05em;opacity:.78;text-shadow:0 1px 4px #000c;white-space:pre;pointer-events:none;font-variant-numeric:tabular-nums}
+  #street{position:fixed;left:18px;top:38px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:0;text-shadow:0 1px 4px #000c;pointer-events:none;transition:opacity 1.2s}
+  #street.on{animation:st 6s ease forwards}
+  @keyframes st{0%{opacity:0}12%{opacity:.85}75%{opacity:.85}100%{opacity:0}}
+  #cap{position:fixed;left:50%;top:13%;transform:translateX(-50%);max-width:min(680px,86vw);text-align:center;opacity:0;transition:opacity .35s;pointer-events:none}
+  #cap.on{opacity:1}
+  #capWho{font-size:11px;letter-spacing:.16em;text-transform:uppercase;opacity:.7;margin-bottom:3px;text-shadow:0 1px 4px #000}
+  #capTxt{font-size:clamp(16px,2.2vw,22px);line-height:1.3;text-shadow:0 1px 6px #000,0 0 2px #000}
+  #cap.inner #capTxt{font-style:italic;opacity:.92}
+  .btns{position:fixed;right:14px;top:12px;display:flex;gap:8px}
+  .btns button{background:rgba(0,0,0,.35);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;backdrop-filter:blur(4px)}
+  .btns button:hover{background:rgba(255,255,255,.18)}
+  #intro{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(6,8,12,.55);backdrop-filter:blur(3px);transition:opacity .8s;text-align:center;padding:24px;box-sizing:border-box}
+  #intro.gone{opacity:0;pointer-events:none}
+  #intro h1{font-size:clamp(32px,6vw,64px);margin:0 0 6px;font-weight:800;letter-spacing:-.02em}
+  #intro p{margin:6px 0;max-width:34em;opacity:.8;line-height:1.5}
+  #go{margin-top:22px;background:#1fbf8f;color:#04241c;border:0;border-radius:999px;padding:14px 34px;font-size:17px;font-weight:800;cursor:pointer}
+  #go:hover{background:#3fe0b0}
+  .hint{font-size:12px;opacity:.55;margin-top:14px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"></div>
+<div id="street"></div>
+<div id="cap"><div id="capWho"></div><div id="capTxt"></div></div>
+<div class="btns"><button id="mute">Sound on</button><button id="fs">Fullscreen</button></div>
+<div id="intro">
+  <h1>Last Mile</h1>
+  <p>An endless shift as a London delivery rider, seen over the handlebars of an electric moped. Nobody is driving but the rider — just watch: offers, rain, red lights, stairs, the odd wrong door.</p>
+  <button id="go">Start the shift</button>
+  <div class="hint">Best with sound · M mutes · F for fullscreen · add ?t=18.5 (hour) or ?w=rain to the address</div>
+</div>
+<script src="js/core.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/world.js"></script>
+<script src="js/render.js"></script>
+<script src="js/scenes.js"></script>
+<script src="js/story.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
