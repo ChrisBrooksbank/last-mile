@@ -120,59 +120,12 @@ function fr(axis, plane, h0, h1, y0, y1, fill) {
 }
 
 // ---------- people ----------
-function person(o) {
-  const x = o.x, y = o.y, h = o.h, dm = o.dm || 10;
-  const S = c => o.raw ? rgb(c) : shade(c, dm, .95);
-  const sw = o.walk ? Math.sin(o.ph || 0) * .1 * h : 0;
-  ctx.save();
-  if (!o.noShadow) { ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(x, y, h * .13, h * .028, 0, 0, TAU); ctx.fill(); }
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = S(o.bot); ctx.lineWidth = h * .078;
-  const hipY = y - h * .47;
-  if (o.front) {
-    ctx.beginPath(); ctx.moveTo(x - h * .045, hipY); ctx.lineTo(x - h * .05 - sw * .2, y - h * .03); ctx.moveTo(x + h * .045, hipY); ctx.lineTo(x + h * .05 + sw * .2, y - h * .03); ctx.stroke();
-  } else {
-    ctx.beginPath(); ctx.moveTo(x, hipY); ctx.lineTo(x + sw, y - h * .03); ctx.moveTo(x, hipY); ctx.lineTo(x - sw, y - h * .03); ctx.stroke();
-  }
-  ctx.strokeStyle = S([24, 24, 28]); ctx.lineWidth = h * .06;
-  ctx.beginPath(); ctx.moveTo(x + (o.front ? -h * .05 : sw) - h * .02, y - h * .015); ctx.lineTo(x + (o.front ? -h * .05 : sw) + h * .03, y - h * .015);
-  ctx.moveTo(x + (o.front ? h * .05 : -sw) - h * .02, y - h * .015); ctx.lineTo(x + (o.front ? h * .05 : -sw) + h * .03, y - h * .015); ctx.stroke();
-  const tw = o.front ? h * .27 : h * .19;
-  ctx.fillStyle = S(o.top);
-  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - tw / 2, y - h * .84, tw, h * .4, h * .05) : ctx.rect(x - tw / 2, y - h * .84, tw, h * .4); ctx.fill();
-  if (o.long) { ctx.fillStyle = S(o.top); ctx.fillRect(x - tw / 2, y - h * .5, tw, h * .3); }
-  ctx.strokeStyle = S(o.sleeve || o.top); ctx.lineWidth = h * .06;
-  if (o.arms) o.arms(x, y, h, tw); else {
-    ctx.beginPath();
-    if (o.front) { ctx.moveTo(x - tw / 2, y - h * .8); ctx.lineTo(x - tw / 2 - h * .02, y - h * .52); ctx.moveTo(x + tw / 2, y - h * .8); ctx.lineTo(x + tw / 2 + h * .02, y - h * .52); }
-    else { ctx.moveTo(x, y - h * .8); ctx.lineTo(x - sw * .8, y - h * .52); }
-    ctx.stroke();
-  }
-  const hr = h * .066;
-  ctx.fillStyle = S(o.skin); ctx.fillRect(x - hr * .35, y - h * .87, hr * .7, hr * .6);
-  ctx.beginPath(); ctx.arc(x, y - h * .925, hr, 0, TAU); ctx.fill();
-  if (o.helmet) { ctx.fillStyle = S(o.helmet); ctx.beginPath(); ctx.arc(x, y - h * .935, hr * 1.12, Math.PI, 0); ctx.fill(); ctx.fillRect(x - hr * 1.12, y - h * .935, hr * 2.24, hr * .35); }
-  else if (o.hair) {
-    ctx.fillStyle = S(o.hair); ctx.beginPath(); ctx.arc(x, y - h * .935, hr * 1.06, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
-    if (o.longHair) ctx.fillRect(x - hr * 1.05, y - h * .93, hr * .5, hr * 1.9), ctx.fillRect(x + hr * .55, y - h * .93, hr * .5, hr * 1.9);
-  }
-  if (o.front && !o.helmet && h > 120) {
-    ctx.fillStyle = 'rgba(30,20,20,.8)'; ctx.fillRect(x - hr * .45, y - h * .93, hr * .18, hr * .18); ctx.fillRect(x + hr * .27, y - h * .93, hr * .18, hr * .18);
-    ctx.strokeStyle = 'rgba(80,30,30,.7)'; ctx.lineWidth = Math.max(1, hr * .07); ctx.beginPath();
-    if (o.mood === 'sour') { ctx.moveTo(x - hr * .3, y - h * .875); ctx.lineTo(x + hr * .3, y - h * .885); } else ctx.arc(x, y - h * .9, hr * .3, .2, Math.PI - .2);
-    ctx.stroke();
-  }
-  if (o.umb) {
-    ctx.strokeStyle = 'rgba(20,20,20,.8)'; ctx.lineWidth = Math.max(1, h * .012);
-    ctx.beginPath(); ctx.moveTo(x + h * .05, y - h * .62); ctx.lineTo(x + h * .05, y - h * 1.12); ctx.stroke();
-    ctx.fillStyle = S(o.umb); ctx.beginPath(); ctx.ellipse(x + h * .05, y - h * 1.12, h * .3, h * .1, 0, Math.PI, 0); ctx.fill();
-  }
-  ctx.restore();
-}
+// person() lives in people.js
 function drawPed(p) {
   const q = Pw(p.x, 0, p.z); if (!q || q[0] < -60 || q[0] > SW + 60) return;
   const dm = q[2], h = p.h * F / dm; if (h < 4) return;
-  person({ x: q[0], y: q[1], h, dm, skin: p.skin, hair: p.hair, top: p.top, bot: p.bot, walk: true, ph: p.ph, umb: env.rain > .2 ? p.umb : null, front: false, noShadow: h < 14 });
+  const away = (FR.b * p.dz * cam.sn + FR.d * p.dz * cam.cs) > 0;
+  person(Object.assign({}, p, { x: q[0], y: q[1], h, dm, view: away ? 'back' : 'front', walk: true, umb: env.rain > .2 ? p.umb : null, noShadow: h < 14, mood: 'ok', phone: p.phone && !away }));
   if (env.lamp > .3 && h > 8) glow(q[0], q[1] - h * .5, h * .5, [255, 200, 140], .05 * env.lamp);
 }
 
@@ -299,84 +252,18 @@ function drawLot(S, l, dmin) {
   }
 }
 
-// ---------- vehicles ----------
-function drawVeh(v) {
-  if (v.type === 'bike') return drawCyclist(v);
-  let x0, x1, z0, z1;
-  if (v.axis === 'z') { x0 = v.x - v.w / 2; x1 = v.x + v.w / 2; z0 = v.z - v.len / 2; z1 = v.z + v.len / 2; }
-  else { x0 = v.x - v.len / 2; x1 = v.x + v.len / 2; z0 = v.z - v.w / 2; z1 = v.z + v.w / 2; }
-  const T = v.type, lowTop = T === 'car' ? .88 : T === 'cab' ? 1.0 : v.h, y0 = T === 'bus' ? .45 : .28;
-  poly('rgba(0,0,0,.28)', [x0 - .1, .01, z0 - .1, x1 + .1, .01, z0 - .1, x1 + .1, .01, z1 + .1, x0 - .1, .01, z1 + .1]);
-  const body = box(x0, x1, y0, lowTop, z0, z1, v.col);
-  if (!body) return;
-  if (T === 'car' || T === 'cab') {
-    const glass = mixc(v.col, [22, 30, 42], .78);
-    if (v.axis === 'z') box(x0 + .1, x1 - .1, lowTop, v.h, z0 + .85, z1 - .75, glass);
-    else box(x0 + .85, x1 - .75, lowTop, v.h, z0 + .1, z1 - .1, glass);
-  }
-  const dm = body.dm, az = v.axis === 'z';
-  let end = null, side = null;
-  if (az) {
-    if (body.fzs) end = { axis: 'z', plane: body.fzs < 0 ? z0 : z1, h0: x0, h1: x1, front: body.fzs < 0 ? v.dir === -1 : v.dir === 1 };
-    if (body.fxs) side = { axis: 'x', plane: body.fxs < 0 ? x0 : x1, h0: z0, h1: z1 };
-  } else {
-    if (body.fxs) end = { axis: 'x', plane: body.fxs < 0 ? x0 : x1, h0: z0, h1: z1, front: body.fxs < 0 ? v.dir === -1 : v.dir === 1 };
-    if (body.fzs) side = { axis: 'z', plane: body.fzs < 0 ? z0 : z1, h0: x0, h1: x1 };
-  }
-  const dark = shade([12, 12, 14], dm);
-  if (side) {
-    const L = side.h1 - side.h0;
-    if (T === 'bus') {
-      const win = env.winLit > .3 ? emit([255, 222, 160], dm, .55) : shade([40, 54, 70], dm);
-      for (let y = 0; y < 2; y++) { const a0 = y ? 2.55 : 0.95, a1 = y ? 3.65 : 2.0; const n = Math.max(1, Math.floor(L / 1.5)); for (let k = 0; k < n; k++) fr(side.axis, side.plane, side.h0 + .5 + k * (L - 1) / n, side.h0 + .5 + (k + .8) * (L - 1) / n, a0, a1, win); }
-    } else if (T === 'van') fr(side.axis, side.plane, side.h1 - L * .28, side.h1 - L * .02, 1.25, 2.0, shade([40, 54, 70], dm));
-    for (const f of [.17, .83]) fr(side.axis, side.plane, side.h0 + L * f - .34, side.h0 + L * f + .34, 0, .64, dark);
-  }
-  if (end) {
-    const Wd = end.h1 - end.h0, cx = (end.h0 + end.h1) / 2;
-    if (end.front) {
-      const hl = emit([255, 250, 225], dm, .9);
-      fr(end.axis, end.plane, end.h0 + Wd * .07, end.h0 + Wd * .27, .6, .76, hl); fr(end.axis, end.plane, end.h1 - Wd * .27, end.h1 - Wd * .07, .6, .76, hl);
-      fr(end.axis, end.plane, cx - Wd * .18, cx + Wd * .18, .45, .6, dark);
-      if (T === 'van' || T === 'bus') fr(end.axis, end.plane, end.h0 + Wd * .06, end.h1 - Wd * .06, T === 'bus' ? 1.9 : 1.3, T === 'bus' ? 3.6 : 2.1, shade([40, 54, 70], dm));
-      if (env.lamp > .2 || env.rain > .3) {
-        for (const xx of [end.h0 + Wd * .17, end.h1 - Wd * .17]) { const p = end.axis === 'z' ? Pw(xx, .68, end.plane) : Pw(end.plane, .68, xx); if (p) glow(p[0], p[1], Math.max(4, F / dm * .55), [255, 244, 210], .55 * Math.max(env.lamp, .4)); }
-      }
-    } else {
-      const br = v.brake ? 1 : .55, tl = emit([255, 40, 34], dm, br);
-      fr(end.axis, end.plane, end.h0 + Wd * .05, end.h0 + Wd * .26, .6, .8, tl); fr(end.axis, end.plane, end.h1 - Wd * .26, end.h1 - Wd * .05, .6, .8, tl);
-      fr(end.axis, end.plane, cx - Wd * .15, cx + Wd * .15, .4, .52, emit([225, 215, 120], dm, .6));
-      if (T === 'bus') fr(end.axis, end.plane, end.h0 + Wd * .08, end.h1 - Wd * .08, 2.4, 3.6, env.winLit > .3 ? emit([255, 222, 160], dm, .5) : shade([40, 54, 70], dm));
-      if (T === 'van') fr(end.axis, end.plane, end.h0 + Wd * .1, end.h1 - Wd * .1, 1.5, 2.1, shade([44, 56, 70], dm));
-      const pa = end.axis === 'z' ? Pw(end.h0 + Wd * .15, .7, end.plane) : Pw(end.plane, .7, end.h0 + Wd * .15), pb = end.axis === 'z' ? Pw(end.h1 - Wd * .15, .7, end.plane) : Pw(end.plane, .7, end.h1 - Wd * .15);
-      const ga = (v.brake ? .55 : .2) * (0.4 + env.night + env.rain), rr = Math.max(4, F / dm * .55);
-      for (const q of [pa, pb]) if (q) {
-        glow(q[0], q[1], rr, [255, 30, 24], ga);
-        if (env.wet > .4 && rr <= 14) { const g = ctx.createLinearGradient(0, q[1], 0, q[1] + rr * 5); g.addColorStop(0, 'rgba(255,40,30,' + (.28 * env.wet).toFixed(2) + ')'); g.addColorStop(1, 'rgba(255,40,30,0)'); ctx.fillStyle = g; ctx.fillRect(q[0] - rr * .25, q[1], rr * .5, rr * 5); }
-      }
-    }
-  }
-  if (T === 'cab') { const p = Pw(v.x, v.h + .12, v.z); if (p) { const r = F / dm * .3; ctx.fillStyle = emit([255, 210, 90], dm, .9); ctx.fillRect(p[0] - r, p[1] - r * .3, r * 2, r * .5); } }
-}
+// ---------- vehicles (see vehicles.js) ----------
 function drawCyclist(v) {
   const q = Pw(v.x, 0, v.z); if (!q) return; const rz = q[2], s = F / rz;
   ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(q[0], q[1], .3 * s, .05 * s, 0, 0, TAU); ctx.fill();
   ctx.fillStyle = shade([14, 14, 16], rz); ctx.fillRect(q[0] - .035 * s, q[1] - .68 * s, .07 * s, .68 * s);
-  person({ x: q[0], y: q[1] + .02 * s, h: 1.75 * s * .94, dm: rz, skin: SKIN[1], top: [210, 200, 70], bot: [30, 30, 40], helmet: [40, 60, 130], front: false, walk: false, noShadow: true, arms: (x, y, h) => { ctx.beginPath(); ctx.moveTo(x, y - h * .8); ctx.lineTo(x, y - h * .57); ctx.stroke(); } });
+  person({ x: q[0], y: q[1] + .02 * s, h: 1.75 * s * .94, dm: rz, skin: SKIN[1], top: [210, 200, 70], bot: [30, 30, 40], helmet: [40, 60, 130], view: 'back', armPose: 'bars', outfit: 'jacket', walk: false, noShadow: true });
   glow(q[0], q[1] - .75 * s, .3 * s, [255, 30, 24], .6 * Math.max(.4, env.lamp));
 }
 
 function drawFurn(S, f) {
   switch (f.k) {
-    case 'lamp': {
-      box(f.x - .06, f.x + .06, 0, 5.4, f.z - .06, f.z + .06, [46, 50, 54]);
-      const x2 = f.x - f.side * 1.2; box(Math.min(f.x, x2), Math.max(f.x, x2), 5.32, 5.44, f.z - .05, f.z + .05, [46, 50, 54]);
-      const p = Pw(x2, 5.3, f.z); if (!p) break; const rz = p[2], on = env.lamp;
-      ctx.fillStyle = on > .1 ? emit([255, 226, 170], rz, 1) : shade([90, 94, 98], rz);
-      ctx.fillRect(p[0] - .16 * F / rz, p[1] - .03 * F / rz, .32 * F / rz, .07 * F / rz);
-      glow(p[0], p[1], Math.max(6, F / rz * 1.7), [255, 210, 140], on * .75);
-      break;
-    }
+    case 'lamp': drawLamp(f); break;
     case 'tree': {
       box(f.x - .12, f.x + .12, 0, 2.6, f.z - .12, f.z + .12, [70, 54, 40]);
       const p = Pw(f.x, 4.4 * f.sz, f.z); if (!p) break; const rz = p[2], r = F / rz * 2.2 * f.sz;

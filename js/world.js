@@ -162,6 +162,5 @@ function mkVeh(S, lane, z) {
 }
 function mkPed(S, z) {
   const r = G, side = r.c(.5) ? 1 : -1;
-  return { z, x: side * (S.halfW + S.pav * r.r(.3, .85)), dz: (r.c(.5) ? 1 : -1) * r.r(1.05, 1.6), skin: r.p(SKIN), hair: r.p(HAIR), top: r.p(CLOTHES), bot: r.p([[40, 44, 60], [30, 30, 34], [70, 80, 110], [90, 76, 60]]), umb: r.c(.85) ? r.p([[30, 30, 36], [140, 30, 40], [40, 60, 110]]) : null, h: r.r(1.55, 1.85), ph: r.n() * 6, phone: r.c(.25) };
+  return Object.assign(randomLook(r), { z, x: side * (S.halfW + S.pav * r.r(.3, .85)), dz: (r.c(.5) ? 1 : -1) * r.r(1.05, 1.6), umb: r.c(.85) ? r.p([[30, 30, 36], [140, 30, 40], [40, 60, 110]]) : null, h: r.r(1.55, 1.85), ph: r.n() * 6, phone: r.c(.25), bag: r.c(.2) ? r.p([[90, 60, 40], [30, 30, 34], [150, 40, 50]]) : null });
 }
-

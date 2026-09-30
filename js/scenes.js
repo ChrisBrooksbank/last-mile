@@ -371,13 +371,7 @@ function drawDoorway(t, z, open, cust, arm, bagT) {
   if (cust) {
     const s = F / (rz + .7), base = P(0 - cam.x, r.y0, rz + .7), h = 1.7 * s;
     const bx = base[0], by = base[1];
-    person(Object.assign({}, cust.look, { x: bx, y: by, h, front: true, raw: true, noShadow: true, arms: (x, y, hh, tw) => {
-      ctx.lineWidth = hh * .06; ctx.strokeStyle = rgb(cust.look.sleeve || cust.look.top); ctx.beginPath();
-      ctx.moveTo(x - tw / 2, y - hh * .8); ctx.lineTo(x - tw / 2 - hh * .02, y - hh * .52);
-      const ext = arm || 0;
-      ctx.moveTo(x + tw / 2, y - hh * .8); ctx.lineTo(x + tw / 2 + hh * (.02 + .1 * ext), y - hh * (.52 + .2 * ext)); ctx.stroke();
-      ctx.fillStyle = rgb(cust.look.skin); ctx.beginPath(); ctx.arc(x + tw / 2 + hh * (.02 + .1 * ext), y - hh * (.52 + .2 * ext), hh * .028, 0, TAU); ctx.fill();
-    } }));
+    person(Object.assign({}, cust.look, { x: bx, y: by, h, view: 'front', raw: true, noShadow: true, reach: arm || 0, reachSide: 1, mood: (arm || 0) > .3 ? 'happy' : 'ok', noStubble: false }));
     if (cust.dog) { ctx.fillStyle = 'rgb(120,86,54)'; ctx.beginPath(); ctx.ellipse(bx - h * .22, by - h * .1, h * .12, h * .08, 0, 0, TAU); ctx.fill(); ctx.beginPath(); ctx.arc(bx - h * .3, by - h * .17, h * .05, 0, TAU); ctx.fill(); }
   }
   ctx.restore();
@@ -423,15 +417,7 @@ function renderShop(dt) {
   // staff (behind the counter)
   for (const p of S.staff) {
     const px = w * p.x + Math.sin(t * p.sp + p.ph) * w * p.amp, py = h * .74 + h * p.hh * .4;
-    person({ x: px, y: py + (p.bow || 0), h: h * p.hh, front: true, raw: true, noShadow: true, skin: p.look.skin, hair: p.look.hair, top: p.look.top, bot: p.look.bot, sleeve: p.look.sleeve, mood: p.mood, longHair: p.look.longHair,
-      helmet: null, arms: (x, y, hh, tw) => {
-        ctx.lineWidth = hh * .06; ctx.strokeStyle = rgb(p.look.sleeve || p.look.top); ctx.lineCap = 'round'; ctx.beginPath();
-        const ex = p.reach || 0;
-        ctx.moveTo(x - tw / 2, y - hh * .8); ctx.lineTo(x - tw / 2 - hh * .03, y - hh * .5);
-        ctx.moveTo(x + tw / 2, y - hh * .8); ctx.lineTo(x + tw / 2 + hh * (.03 + .1 * ex), y - hh * (.5 - .02 * ex)); ctx.stroke();
-      } });
-    // apron
-    ctx.fillStyle = rgba(cu.col, .9); ctx.fillRect(px - h * p.hh * .115, py - h * p.hh * .48, h * p.hh * .23, h * p.hh * .3);
+    person(Object.assign({}, p.look, { x: px, y: py + (p.bow || 0), h: h * p.hh, view: 'front', raw: true, noShadow: true, mood: p.mood, reach: p.reach || 0, reachSide: 1, apron: cu.col, outfit: 'apron' }));
   }
   // counter
   const cy = h * .74;
@@ -455,15 +441,14 @@ function renderShop(dt) {
   S.others.forEach((o, i) => {
     if (i > 0) return;
     const oh = h * .8, ox = w * .9 + Math.sin(t * .4) * 3, oy = h * 1.06;
-    person({ x: ox, y: oy, h: oh, front: false, raw: true, noShadow: true, skin: [60, 44, 36], top: mulc(o.col, .3), bot: [16, 16, 20], helmet: mulc(o.col, .3), walk: false, arms: () => { } });
-    ctx.fillStyle = 'rgb(20,64,60)'; rr(ctx, ox - oh * .13, oy - oh * .82, oh * .26, oh * .26, 8); ctx.fill();
+    person({ x: ox, y: oy, h: oh, view: 'back', raw: true, noShadow: true, skin: [60, 44, 36], top: mulc(o.col, .3), bot: [16, 16, 20], helmet: mulc(o.col, .3), outfit: 'hiviz', pack: [20, 64, 60] });
   });
   ctx.restore();
   // warm tone
   ctx.fillStyle = 'rgba(255,190,120,.05)'; ctx.fillRect(0, 0, w, h);
 }
 function makeShop(cu, busy) {
-  const look = () => ({ skin: G.p(SKIN), hair: G.p(HAIR), top: G.p([[236, 236, 232], cu.col, [60, 60, 66], [200, 200, 196]]), bot: [36, 36, 42], longHair: G.c(.35) });
-  const staff = [{ x: .36, hh: .56, sp: .5, ph: 0, amp: .01, look: look(), mood: 'ok' }, { x: .6, hh: .5, sp: .8, ph: 2, amp: .035, look: look() }];
+  const look = () => randomLook(G, 'staff');
+  const staff = [{ x: .34, hh: .86, sp: .5, ph: 0, amp: .01, look: look(), mood: 'ok' }, { x: .64, hh: .78, sp: .8, ph: 2, amp: .035, look: look() }];
   return { cu, staff, others: Array.from({ length: busy }, (_, i) => ({ x: i ? .93 : .06, col: G.p([[30, 170, 150], [220, 60, 60], [60, 90, 200]]) })), bag: 0, bagGrab: 0 };
 }

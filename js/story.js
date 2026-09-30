@@ -37,12 +37,7 @@ function* fade(to, sec) {
 function* until(fn, timeout) { let t = 0; while (!fn()) { t += DT; if (timeout && t > timeout) return; yield 0; } }
 
 // ---------- people ----------
-function mkLook(kind) {
-  const l = { skin: G.p(SKIN), hair: G.p(HAIR), top: G.p(CLOTHES), bot: G.p([[40, 44, 60], [30, 30, 34], [70, 80, 110], [90, 76, 60]]), longHair: G.c(.4) };
-  if (kind === 'gown') { l.top = G.p([[210, 200, 220], [120, 140, 170], [180, 120, 130]]); l.long = true; l.bot = l.top; }
-  if (kind === 'work') { l.top = [230, 232, 236]; l.bot = [40, 44, 60]; }
-  return l;
-}
+function mkLook(kind) { return randomLook(G, kind === 'plain' ? undefined : kind); }
 function mkCustomer(dest, plan) {
   const D = DISTRICTS[plan.district], first = G.p(FIRST), type = dest.type;
   const c = { first, name: first + ' ' + String.fromCharCode(65 + G.i(0, 25)) + '.', type, look: mkLook(G.p(['plain', 'plain', 'plain', 'gown', 'work'])), dog: G.c(.13),
@@ -365,15 +360,15 @@ function* doorstep(tr) {
   for (let o = 0; o < 1; o += DT * 1.6) { scene.door.open = o; yield 0; }
   scene.door.open = 1;
   Snd.creak(); yield .4;
-  yield* speak(c.first, G.p(['Hi!', 'Alright?', 'Oh, hello.', 'Hey — that was quick.']), c.look.longHair ? 210 : 140);
+  yield* speak(c.first, G.p(['Hi!', 'Alright?', 'Oh, hello.', 'Hey — that was quick.']), c.look.female ? 210 : 140);
   yield* speak('You', 'Delivery for ' + c.first + '?', 120);
-  yield* speak(c.first, G.p(['Yep, that\'s me.', 'That\'s me, thanks.', 'Yeah, thanks.']), c.look.longHair ? 210 : 140);
+  yield* speak(c.first, G.p(['Yep, that\'s me.', 'That\'s me, thanks.', 'Yeah, thanks.']), c.look.female ? 210 : 140);
   // handover
   Snd.bag(); for (let k = 0; k < 1; k += DT * 1.1) { scene.door.bagT = k; scene.door.arm = Math.min(1, k * 2); yield 0; }
   scene.door.bagT = 1; phone.gt = .7; phone.mode = 'done'; phone.amount = tr.pay; phone.sub = 'Order #' + tr.order; Snd.cash(); yield 1.3;
   phone.gt = 0;
   const night = env.hour > 18.5 || env.hour < 5;
-  yield* speak(c.first, G.p(['Cheers, thanks a lot!', 'Lovely, thank you.', 'Nice one, cheers.']), c.look.longHair ? 210 : 140);
+  yield* speak(c.first, G.p(['Cheers, thanks a lot!', 'Lovely, thank you.', 'Nice one, cheers.']), c.look.female ? 210 : 140);
   yield* speak('You', G.p(['No worries, enjoy!', night ? 'Have a good night.' : 'Have a good day.', 'Enjoy!']), 120);
   scene.door.bagT = -1;
   for (let o = 1; o > 0; o -= DT * 1.5) { scene.door.open = o; scene.door.arm = 0; yield 0; }
