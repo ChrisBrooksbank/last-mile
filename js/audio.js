@@ -57,6 +57,21 @@ const Snd = (() => {
   }
   const T = (p, v, tc) => p.setTargetAtTime(v, ctx.currentTime, tc || .25);
 
+  // ---- spoken dialogue through the browser's speech synthesis (British voices when available)
+  let voiceList = [];
+  const loadVoices = () => { voiceList = (window.speechSynthesis && speechSynthesis.getVoices()) || []; };
+  if (window.speechSynthesis) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+  const FEM = /female|zira|hazel|susan|libby|sonia|maisie|jenny|aria|emma|amy|kate|serena|fiona|samantha|karen|moira|tessa|olivia|natasha|clara|ava/i;
+  const MAL = /(?<!fe)male|george|ryan|daniel|thomas|oliver|guy|david|mark|alfie|arthur|james|liam|william|connor/i;
+  const hashKey = k => { let h = 7; for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) | 0; return Math.abs(h); };
+  function pickVoice(female, key) {
+    let pool = voiceList.filter(v => /en[-_]GB/i.test(v.lang));
+    if (!pool.length) pool = voiceList.filter(v => /^en/i.test(v.lang));
+    let g = pool.filter(v => female ? FEM.test(v.name) : (MAL.test(v.name) && !FEM.test(v.name)));
+    if (!g.length) g = pool;
+    return g.length ? g[hashKey(key) % g.length] : null;
+  }
+
   // s: {speed, scene ('street'|'shop'|'tunnel'|'black'), indoor, rain, traffic, night, walking}
   function update(s) {
     if (!started) return;
@@ -106,7 +121,21 @@ const Snd = (() => {
   const api = {
     start, update,
     get on() { return started; },
-    toggleMute() { muted = !muted; if (master) T(master.gain, muted ? 0 : .9, .1); return muted; },
+    toggleMute() { muted = !muted; if (master) T(master.gain, muted ? 0 : .9, .1); if (muted && window.speechSynthesis) speechSynthesis.cancel(); return muted; },
+    talk(text, who, o) {
+      o = o || {};
+      if (!started || muted || !window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return null;
+      const key = who || 'x', j = (hashKey(key) % 100) / 100, female = !!o.female;
+      const u = new SpeechSynthesisUtterance(text.replace(/…/g, '...').replace(/\s+/g, ' '));
+      const v = pickVoice(female, key); if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-GB';
+      u.pitch = o.pitch || (female ? 1.02 + j * .25 : .82 + j * .28);
+      u.rate = o.rate || (.96 + j * .14);
+      u.volume = o.vol || .95;
+      const h = { done: false };
+      u.onend = u.onerror = () => { h.done = true; };
+      try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) { return null; }
+      return h;
+    },
     ping() { tone(988, 'sine', .35, .09); tone(1318, 'sine', .5, .09, .13); tone(1760, 'sine', .6, .05, .26); },
     buzz() { for (let i = 0; i < 2; i++) tone(84, 'square', .18, .05, i * .26); burst(.4, 'lowpass', 300, 1, .05); },
     tap() { burst(.05, 'bandpass', 2200, 2, .12); tone(1400, 'sine', .05, .04); },
@@ -120,6 +149,7 @@ const Snd = (() => {
     bell() { tone(1318, 'sine', .9, .06); tone(1046, 'sine', 1.1, .06, .22); },
     doorBell() { tone(659, 'sine', 1.1, .09); tone(523, 'sine', 1.6, .09, .55); },
     buzzer() { tone(180, 'sawtooth', 1.2, .05); tone(190, 'square', 1.2, .03); },
+    beep() { tone(1760, 'square', .08, .04); tone(2350, 'square', .1, .04, .11); },
     click() { burst(.04, 'bandpass', 1800, 3, .1); },
     door() { burst(.35, 'lowpass', 500, 1, .12, 0, 180); tone(70, 'sine', .3, .1); },
     creak() { tone(300, 'sawtooth', .6, .015, 0, 520); },
@@ -132,6 +162,20 @@ const Snd = (() => {
       f.type = 'lowpass'; f.frequency.value = 1100; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.014, t + 1.5); g.gain.linearRampToValueAtTime(0, t + 6);
       for (let i = 0; i < 6; i++) o.frequency.setValueAtTime(i % 2 ? 960 : 720, t + i);
       o.connect(f); f.connect(g); g.connect(master); o.start(t); o.stop(t + 6.2);
+    },
+    // continuous two-tone siren whose loudness, pan and pitch follow a passing vehicle
+    sirenLive(kind) {
+      if (!started) return null;
+      const t = ctx.currentTime, o = osc('sawtooth', 900), o2 = osc('square', 450), g = ctx.createGain(), f = ctx.createBiquadFilter(), p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+      f.type = 'lowpass'; f.frequency.value = 2400; g.gain.value = 0;
+      const hi = kind === 'amb' ? 1000 : 960, lo = kind === 'amb' ? 780 : 770, gap = kind === 'amb' ? .62 : .5;
+      for (let i = 0; i < 90; i++) { const fq = i % 2 ? lo : hi; o.frequency.setValueAtTime(fq, t + i * gap); o2.frequency.setValueAtTime(fq / 2, t + i * gap); }
+      const g2 = ctx.createGain(); g2.gain.value = .35; o.connect(f); o2.connect(g2); g2.connect(f); f.connect(g); if (p) { g.connect(p); p.connect(master); } else g.connect(master);
+      o.start(t); o2.start(t);
+      return {
+        set(gain, pan, cents) { const n = ctx.currentTime; g.gain.setTargetAtTime(gain, n, .08); if (p) p.pan.setTargetAtTime(pan, n, .1); o.detune.setTargetAtTime(cents, n, .1); o2.detune.setTargetAtTime(cents, n, .1); },
+        stop() { const n = ctx.currentTime; g.gain.setTargetAtTime(0, n, .1); o.stop(n + .6); o2.stop(n + .6); },
+      };
     },
     bird() { if (!started) return; const n = 2 + (Math.random() * 3 | 0), f0 = 2600 + Math.random() * 1600; for (let i = 0; i < n; i++) tone(f0, 'sine', .09, .012, i * .12, f0 * (1.2 + Math.random() * .3), Math.random() * 1.4 - .7); },
     dog() { for (let i = 0; i < 3; i++) { tone(330, 'sawtooth', .16, .06, i * .3, 210); burst(.14, 'bandpass', 900, 2, .06, i * .3); } },

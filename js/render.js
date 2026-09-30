@@ -75,7 +75,7 @@ function Pw(x, y, z) {
   return [CXs + cam.yawPx + _rx * s, HZ + (cam.h - y) * s, _rz];
 }
 function emit(c, z, k) {
-  k = k === undefined ? 1 : k; const f = 1 - Math.exp(-z * env.fog), fc = env.fogC;
+  k = k === undefined ? 1 : k; const f = fogF(z), fc = env.fogC;
   return 'rgb(' + ((c[0] * k + (fc[0] - c[0] * k) * f) | 0) + ',' + ((c[1] * k + (fc[1] - c[1] * k) * f) | 0) + ',' + ((c[2] * k + (fc[2] - c[2] * k) * f) | 0) + ')';
 }
 const glowCache = {};
@@ -124,8 +124,12 @@ function fr(axis, plane, h0, h1, y0, y1, fill) {
 function drawPed(p) {
   const q = Pw(p.x, 0, p.z); if (!q || q[0] < -60 || q[0] > SW + 60) return;
   const dm = q[2], h = p.h * F / dm; if (h < 4) return;
-  const away = (FR.b * p.dz * cam.sn + FR.d * p.dz * cam.cs) > 0;
-  person(Object.assign({}, p, { x: q[0], y: q[1], h, dm, view: away ? 'back' : 'front', walk: true, umb: env.rain > .2 ? p.umb : null, noShadow: h < 14, mood: 'ok', phone: p.phone && !away }));
+  const st = p.state || 'walk', dirn = st === 'cross' ? p.cdir : (Math.sign(p.dz) || 1);
+  let view, face = 1;
+  if (st === 'cross') { view = 'side'; face = Math.sign(dirn * (FR.a * cam.cs - FR.c * cam.sn)) || 1; }
+  else view = (FR.b * dirn * cam.sn + FR.d * dirn * cam.cs) > 0 ? 'back' : 'front';
+  const moving = st === 'walk' || st === 'cross';
+  person(Object.assign({}, p, { x: q[0], y: q[1], h, dm, view, face, walk: moving, umb: env.rain > .2 ? p.umb : null, noShadow: h < 14, mood: st === 'chat' ? 'happy' : 'ok', act: st === 'chat' ? (p.t < 1.8 ? 'wave' : 'talk') : null, actT: p.t, phone: view !== 'back' && (st === 'stand' || (moving && p.basePhone)) }));
   if (env.lamp > .3 && h > 8) glow(q[0], q[1] - h * .5, h * .5, [255, 200, 140], .05 * env.lamp);
 }
 
@@ -212,7 +216,7 @@ function drawTexWall(S, l, tex, dmin) {
   const k = nx > 0 ? .9 : 1, ac = [clamp(env.amb * env.tint[0] * k, 0, 1), clamp(env.amb * env.tint[1] * k, 0, 1), clamp(env.amb * env.tint[2] * k, 0, 1)];
   const lb = env.lamp * .24 * Math.max(0, 1 - dmin / 75); ac[0] = Math.min(1, ac[0] + lb); ac[1] = Math.min(1, ac[1] + lb * .78); ac[2] = Math.min(1, ac[2] + lb * .5);
   if (ac[0] < .985 || ac[1] < .985 || ac[2] < .985) { ctx.globalCompositeOperation = 'multiply'; poly('rgb(' + (ac[0] * 255 | 0) + ',' + (ac[1] * 255 | 0) + ',' + (ac[2] * 255 | 0) + ')', wall); ctx.globalCompositeOperation = 'source-over'; }
-  if (env.winLit > .04 && dmin < 110) {
+  if (env.winLit > .04 && dmin < 145) {
     ctx.globalAlpha = Math.min(1, env.winLit * 1.05);
     for (let i = 0; i < cols.length; i += 5) {
       const sw = Math.max(1, (cols[i + 4] - cols[i + 3]) * ew);
@@ -238,7 +242,7 @@ function drawLot(S, l, dmin) {
     if (tex) drawTexWall(S, l, tex, dmin);
     else poly(shade(l.col, d), [l.x, 0, l.z0, l.x, 0, l.z1, l.x, h, l.z1, l.x, h, l.z0]);
   }
-  if (l.chim && l.kind !== 'glass' && d < 90) {
+  if (l.chim && l.kind !== 'glass' && d < 140) {
     const cz = l.z0 + (l.z1 - l.z0) * .3, cx = l.x + sg * 2.2;
     box(cx - .4, cx + .4, h - .2, h + 1.5, cz - .4, cz + .4, mulc(l.col, .85));
     box(cx - .3, cx + .3, h + 1.5, h + 1.9, cz - .3, cz + .3, [150, 90, 70]);
@@ -253,14 +257,7 @@ function drawLot(S, l, dmin) {
 }
 
 // ---------- vehicles (see vehicles.js) ----------
-function drawCyclist(v) {
-  const q = Pw(v.x, 0, v.z); if (!q) return; const rz = q[2], s = F / rz;
-  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(q[0], q[1], .3 * s, .05 * s, 0, 0, TAU); ctx.fill();
-  ctx.fillStyle = shade([14, 14, 16], rz); ctx.fillRect(q[0] - .035 * s, q[1] - .68 * s, .07 * s, .68 * s);
-  person({ x: q[0], y: q[1] + .02 * s, h: 1.75 * s * .94, dm: rz, skin: SKIN[1], top: [210, 200, 70], bot: [30, 30, 40], helmet: [40, 60, 130], view: 'back', armPose: 'bars', outfit: 'jacket', walk: false, noShadow: true });
-  glow(q[0], q[1] - .75 * s, .3 * s, [255, 30, 24], .6 * Math.max(.4, env.lamp));
-}
-
+// cyclists live in vehicles2.js
 function drawFurn(S, f) {
   switch (f.k) {
     case 'lamp': drawLamp(f); break;
@@ -300,15 +297,6 @@ function drawSignal(S) {
     if (i === act) glow(p[0], p[1], Math.max(5, F / p[2] * .8), cols[i], .8);
   }
 }
-function drawScooter(x, z) {
-  box(x - .22, x + .22, .34, .72, z - .85, z + .55, [34, 40, 46]);
-  box(x - .2, x + .2, .72, .78, z - .55, z + .1, [20, 20, 22]);
-  box(x - .23, x + .23, .78, 1.05, z + .3, z + .5, [30, 34, 38]);
-  box(x - .27, x + .27, .82, 1.4, z - .95, z - .4, [30, 170, 150]);
-  box(x - .06, x + .06, 0, .55, z - .95, z - .6, [12, 12, 14]); box(x - .06, x + .06, 0, .55, z + .4, z + .75, [12, 12, 14]);
-  const p = Pw(x, .68, z - .95); if (p) glow(p[0], p[1], 8, [255, 40, 30], .4);
-}
-
 // ---------- ground ----------
 function drawGround(S, cull) {
   const hw = S.halfW, pav = S.pav, zc = camL.z, zlo = Math.max(-14, zc - 60), zhi = Math.min(cull, zc + FARZ + 20);
@@ -355,12 +343,28 @@ function streetList() {
   if (world.prev) list.push({ S: world.prev.S, fr: world.prev.fr, cull: world.prev.S.cullFar || 1e9 });
   return list;
 }
+// build facade textures nearest-first so buildings never show up flat (and warm the next street before a turn)
+function texWarm(list) {
+  const t0 = performance.now(), cand = [];
+  for (const it of list) {
+    setFrame(it.fr);
+    for (const arr of [it.S.L, it.S.Rt]) for (const l of arr) {
+      if (l.tex) continue; toCam(l.x, (l.z0 + l.z1) / 2);
+      if (_rz < -40 || _rz > 200) continue; cand.push({ d: Math.abs(_rz), S: it.S, l });
+    }
+  }
+  if (!cand.length) return;
+  cand.sort((a, b) => a.d - b.d);
+  const budget = cand[0].d < 60 ? 9 : 3;
+  for (const c of cand) { if (performance.now() - t0 > budget) break; c.l.tex = buildLotTex(c.S, c.l); }
+}
 function renderStreet(dt) {
   const S0 = world.street; if (!S0) return;
   texBudgetReset(); setFrame(IDENT);
   drawSky(); drawSkyline(S0);
   ctx.fillStyle = shade([70, 70, 74], FARZ); ctx.fillRect(0, HZ, SW, SH - HZ);
   const list = streetList();
+  texWarm(world.next ? list.concat([{ S: world.next.S1, fr: world.next.fr }]) : list);
   for (const it of list) { setFrame(it.fr); drawGround(it.S, it.cull); }
   const lots = [];
   for (const it of list) {

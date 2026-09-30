@@ -51,8 +51,8 @@ const PGLASS = {
   van: [[3.98, 1.40], [3.98, 2.08], [4.38, 1.78], [4.72, 1.40]],
 };
 
-function paintSide(T, col, style, lit) {
-  const ppm = VPPM[T], d = VDIM[T], W = Math.round(d[1] * ppm), H = Math.round(d[2] * ppm) + 6;
+function paintSide(T, col, style, lit, livery) {
+  const ppm = VPPM[T], d = VDIM[T], W = Math.round(d[1] * ppm), H = Math.round((d[2] + (livery ? .16 : 0)) * ppm) + 6;
   const c = C2(W, H), g = c.getContext('2d'), X = m => m * ppm, Y = m => H - 3 - m * ppm;
   if (T === 'bus') return paintBusSide(c, g, col, lit, ppm, W, H, X, Y);
   const key = T === 'car' ? 'car' + style : T, pr = PROFILE[key];
@@ -88,6 +88,7 @@ function paintSide(T, col, style, lit) {
   for (const x of wx) { g.fillStyle = '#0a0a0c'; g.beginPath(); g.arc(X(x), Y(wr - .02), X(wr + .06), Math.PI, 0); g.lineTo(X(x + wr + .06), Y(.2)); g.lineTo(X(x - wr - .06), Y(.2)); g.fill(); paintWheel(g, X(x), Y(wr - .02), X(wr)); }
   // mirror
   if (T !== 'van') { g.fillStyle = rgb(mulc(col, .7)); g.fillRect(X(T === 'cab' ? 2.95 : 2.98), Y(1.08), X(.16), X(.1)); }
+  if (livery) paintLiverySide(g, T, d, X, Y, livery);
   return c;
 }
 function paintBusSide(c, g, col, lit, ppm, W, H, X, Y) {
@@ -115,8 +116,8 @@ function paintBusSide(c, g, col, lit, ppm, W, H, X, Y) {
   return c;
 }
 
-function paintEnd(T, col, front, style, lit) {
-  const ppm = VPPM[T], d = VDIM[T], W = Math.round(d[0] * ppm), H = Math.round(d[2] * ppm) + 6;
+function paintEnd(T, col, front, style, lit, livery) {
+  const ppm = VPPM[T], d = VDIM[T], W = Math.round(d[0] * ppm), H = Math.round((d[2] + (livery ? .16 : 0)) * ppm) + 6;
   const c = C2(W, H), g = c.getContext('2d'), X = m => m * ppm, Y = m => H - 3 - m * ppm, w = d[0];
   const glass = glassGradient(g, Y(d[2]), Y(.9));
   g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(X(.08), Y(.1), X(w - .16), X(.1));
@@ -174,12 +175,13 @@ function paintEnd(T, col, front, style, lit) {
     g.fillStyle = '#e9dd7a'; g.fillRect(X(w / 2 - .22), Y(.58), X(.44), X(.12)); g.fillStyle = 'rgba(20,20,20,.7)'; for (let i = 0; i < 6; i++) g.fillRect(X(w / 2 - .19 + i * .07), Y(.56), 1.5, X(.08));
     g.fillStyle = '#1a1a1c'; g.fillRect(X(w / 2 - .15), Y(lowTop - .12), X(.3), X(.05));
   }
+  if (livery) paintLiveryEnd(g, T, front, d, X, Y, livery);
   return c;
 }
 
-function vehTex(T, col, view, style, lit) {
-  const key = T + '|' + col.map(v => v | 0).join(',') + '|' + view + '|' + style + '|' + (lit ? 1 : 0);
-  return VT[key] || (VT[key] = view === 'side' ? paintSide(T, col, style, lit) : paintEnd(T, col, view === 'front', style, lit));
+function vehTex(T, col, view, style, lit, livery) {
+  const key = T + '|' + col.map(v => v | 0).join(',') + '|' + view + '|' + style + '|' + (lit ? 1 : 0) + '|' + (livery || '');
+  return VT[key] || (VT[key] = view === 'side' ? paintSide(T, col, style, lit, livery) : paintEnd(T, col, view === 'front', style, lit, livery));
 }
 function mipOf(img, lv) {
   img._m = img._m || {}; if (img._m[lv]) return img._m[lv];
@@ -250,12 +252,12 @@ function drawVeh(v) {
     if (body.fzs) side = { axis: 'z', plane: body.fzs < 0 ? z0 : z1, h0: x0, h1: x1 };
   }
   if (side) {
-    const st = vehTex(T, v.col, 'side', style, lit), fwd = v.dir > 0;
+    const st = vehTex(T, v.col, 'side', style, lit, v.livery), fwd = v.dir > 0;
     const ra = fwd ? side.h0 : side.h1, rb = fwd ? side.h1 : side.h0;
     if (side.axis === 'x') drawSlicedQuad(st, side.plane, ra, side.plane, rb, 0, v.h + .02, .78); else drawSlicedQuad(st, ra, side.plane, rb, side.plane, 0, v.h + .02, .78);
   }
   if (end) {
-    const et = vehTex(T, v.col, end.front ? 'front' : 'rear', style, lit);
+    const et = vehTex(T, v.col, end.front ? 'front' : 'rear', style, lit, v.livery);
     if (end.axis === 'z') drawSlicedQuad(et, end.h0, end.plane, end.h1, end.plane, 0, v.h + .02, .95); else drawSlicedQuad(et, end.plane, end.h0, end.plane, end.h1, 0, v.h + .02, .95);
     // lit lamps over the painted housings
     const Wd = end.h1 - end.h0;
@@ -276,6 +278,7 @@ function drawVeh(v) {
     }
   }
   if (side && T === 'bus' && lit) { /* windows already painted lit */ }
+  if (v.emerg) emergLights(v);
   if (T === 'cab') { const p = Pw(v.x, v.h + .1, v.z); if (p) { const r = F / dm * .3; ctx.fillStyle = emit([255, 210, 90], dm, .95); ctx.fillRect(p[0] - r, p[1] - r * .35, r * 2, r * .5); glow(p[0], p[1], r * 2.2, [255, 210, 90], .35); } }
 }
 

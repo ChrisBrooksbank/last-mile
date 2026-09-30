@@ -4,16 +4,19 @@ let DT = 0.016;
 const capEl = document.getElementById('cap'), capWho = document.getElementById('capWho'), capTxt = document.getElementById('capTxt');
 let capTimer = 0;
 function caption(who, text, dur, mute) {
-  capWho.textContent = who || ''; capTxt.textContent = text; capEl.classList.add('on'); capEl.classList.toggle('inner', !who);
+  capWho.textContent = (who || '').replace(/^Rider[MF]$/, 'Rider'); capTxt.textContent = text; capEl.classList.add('on'); capEl.classList.toggle('inner', !who);
   capTimer = dur;
 }
-function* speak(who, text, pitch) {
-  const d = Snd.voice(text, pitch, .07);
-  const dur = Math.max(1.5, text.length * .052 + .7);
-  caption(who, text, dur + .5);
-  yield dur;
+function* speak(who, text, pitch, female) {
+  const est = Math.max(1.5, text.length * .052 + .7), isF = female !== undefined ? female : pitch >= 180;
+  const tts = Snd.talk(text, who, { female: isF, pitch: who === 'You' ? .8 : undefined, rate: who === 'You' ? 1.02 : undefined });
+  if (!tts) Snd.voice(text, pitch, .07);
+  caption(who, text, (tts ? est * 1.7 : est) + .5);
+  if (tts) { let tw = 0; yield (dt) => { tw += dt; return tts.done || tw > est * 2.4 + 2; }; yield .3; }
+  else yield est;
 }
-function mutter(text, dur) { if (capTimer <= 0) caption('', text, dur || 3.2); }
+function says(text, dur) { caption('', text, dur || 3.2); if (!Snd.talk(text, 'You', { female: false, pitch: .8, rate: 1.02 })) Snd.voice(text, 105, .06); }
+function mutter(text, dur) { if (capTimer <= 0) { caption('', text, dur || 3.2); Snd.talk(text, 'You', { female: false, pitch: .8, rate: 1.02, vol: .8 }); } }
 
 // ---------- coroutine runner ----------
 let mainGen = null, waitT = 0, waitFn = null;
@@ -70,7 +73,7 @@ function makeOffer() {
   const r = G.n(), bb = b;
   const outcome = r < .5 ? 'ready' : r < .5 + .25 ? 'short' : r < .75 + .08 + bb * .05 ? 'long' : r < .93 ? 'gone' : 'stolen';
   const oc = QP.get('outcome') || outcome; const items = []; const pool = cu.items.slice(); for (let i = 0; i < G.i(2, 3); i++) { const it = pool.splice(G.i(0, pool.length - 1), 1)[0]; if (it) items.push((G.c(.3) ? '2× ' : '1× ') + it); }
-  return { cu, rest, name, plans1, plans2, dropD, cust: dest2.cust, mi, pay, outcome: oc, items, order: String(G.i(1000, 9999)), min: mi * 4.2 + 8, district: DISTRICTS[dropD].name, street: plans1[plans1.length - 1].name };
+  return { cu, rest, name, plans1, plans2, dropD, cust: dest2.cust, mi, pay, outcome: oc, items, order: String(G.i(1000, 9999)), code: String(G.i(1000, 9999)), min: mi * 4.2 + 8, district: DISTRICTS[dropD].name, street: plans1[plans1.length - 1].name };
 }
 function* waitRiding(sec) { let t = 0; while (t < sec) { t += DT; yield 0; } }
 
@@ -80,6 +83,7 @@ function* waitForOrder() {
   for (;;) {
     const b = busyness();
     yield* waitRiding(first ? 7 : G.r(9, 24) * (1.3 - b * .6)); first = false;
+    while (merchActive) yield 0;
     const tr = makeOffer();
     phone.offer = { pay: tr.pay, mi: tr.mi, rest: tr.name, cuisine: tr.cu.k, street: tr.street, district: tr.district, min: tr.min };
     phone.mode = 'offer'; phone.timer = 1; phone.gt = 1; phone.tap = null;
@@ -155,6 +159,31 @@ function* enterTunnel(tun, look) {
   scene.tun = tun; scene.mode = 'tunnel'; scene.wz = 0.01; scene.wx = 0; scene.look = look || 0; scene.door = null; scene.extra = null; scene.wph = 0;
 }
 
+// ---------- a chat with another courier while waiting for an order ----------
+const RIDER_CHATS = [
+  [['R', 'Busy tonight, is it?'], ['Y', 'Steady. You?'], ['R', 'Non-stop since six. My legs are gone.'], ['Y', 'Not long to go now.']],
+  [['R', 'Is that the new model? How is the range?'], ['Y', 'Fifty miles, easy. The battery is a dream.'], ['R', 'Might switch. Mine is on its last legs.'], ['Y', 'Do it. You will not look back.']],
+  [['R', 'Been waiting long?'], ['Y', 'Ages. The kitchen is slammed.'], ['R', 'Same at the last place. Thirty minutes.'], ['Y', 'Unreal.']],
+  [['R', 'Are you getting good offers?'], ['Y', 'Three pounds for two miles earlier.'], ['R', 'Robbery. I declined that one.'], ['Y', 'Every time.']],
+  [['R', 'Did you hear that siren earlier?'], ['Y', 'Yeah. Is it kicking off?'], ['R', 'It is always kicking off round here.'], ['Y', 'Ha! It really is.']],
+  [['R', 'Had a bloke tip me ten quid last night.'], ['Y', 'Never happens to me.'], ['R', 'First one this month.']],
+  [['R', 'Did you watch the match?'], ['Y', 'Do not get me started.'], ['R', 'Three nil.'], ['Y', 'Please stop.']],
+  [['R', 'Lovely weather for it.'], ['Y', 'Ha. Soaked through.'], ['R', 'Should have been a barista.'], ['Y', 'I think that every single day.']],
+];
+function mkOther() { return { x: .93, col: G.p([[30, 170, 150], [220, 60, 60], [60, 90, 200]]), look: randomLook(G, 'rider') }; }
+function* riderChat(S) {
+  const o = S.others[0]; if (!o) return;
+  const f = !!o.look.female, who = 'Rider' + (f ? 'F' : 'M');
+  const pool = RIDER_CHATS.filter((c, i) => i !== 7 || env.rain > .25);
+  const script = G.p(pool);
+  o.chat = true; yield .5;
+  for (const [sp, text] of script) {
+    if (sp === 'R') yield* speak(who, text, f ? 205 : 130, f); else yield* speak('You', text, 118);
+    yield .2;
+  }
+  yield .4; o.chat = false;
+}
+
 // ---------- pickup ----------
 function* doPickup(tr) {
   const S = () => world.street;
@@ -189,16 +218,23 @@ function* doPickup(tr) {
 function* inShop(tr) {
   const busy = G.i(0, busyness() > .7 ? 2 : 1);
   scene.shop = makeShop(tr.cu, busy); scene.mode = 'shop'; scene.wph = 0; scene.rideActive = false;
-  const S = scene.shop, st = S.staff[0], name = tr.cust.first;
+  const S = scene.shop, st = S.staff[0], name = tr.cust.first, sp = st.look.female ? 200 : 135;
+  const chatty = (tr.outcome === 'short' || tr.outcome === 'long') && G.c(.55);
+  if (chatty && !S.others.length) S.others.push(mkOther());
   yield* fade(0, .5);
   Snd.clatter();
   yield .8;
-  yield* speak('Staff', G.p(['Hi, collecting?', 'Evening — pick up?', 'Yeah?', 'Hello, delivery?']), 190);
+  yield* speak('Staff', G.p(['Hi, collecting?', 'Evening — pick up?', 'Yeah?', 'Hello, delivery?']), sp);
   yield* speak('You', G.p(['Order for ' + name + '.', 'Collecting for ' + name + ', please.', 'Pickup for ' + name + '.']), 120);
   const handOver = function* (line) {
     Snd.bag(); for (let t = 0; t < .8; t += DT) { S.bag = t / .8; st.reach = Math.min(1, t / .5); yield 0; }
     S.bag = 1; phone.status = 'Ready — confirm pickup'; phone.items = tr.items;
-    yield* speak('Staff', line, 200);
+    yield* speak('Staff', line, sp);
+    yield* speak('Staff', G.p(['Scan the code on the bag, please.', 'Just scan the sticker there.', 'You need to scan that code.']), sp);
+    phone.mode = 'scan'; phone.scanOk = false; phone.gt = 1; yield .6;
+    for (let t = 0; t < 1.8; t += DT) yield 0;
+    Snd.beep(); phone.scanOk = true; yield 1;
+    phone.mode = 'arrived'; phone.gt = 0;
     Snd.bag(); for (let t = 0; t < .7; t += DT) { S.bagGrab = t / .7; yield 0; }
     S.bag = 0; st.reach = 0; phone.gt = .8; phone.mode = 'arrived'; Snd.tap(); yield .8; phone.gt = 0;
     yield* speak('You', G.p(['Cheers!', 'Thanks, have a good one.', 'Thanks!']), 120);
@@ -211,21 +247,22 @@ function* inShop(tr) {
     case 'ready':
       yield .4; yield* handOver(G.p(['Here you go.', 'There you go, cheers.', 'All here — enjoy.'])); break;
     case 'short': {
-      yield* speak('Staff', G.p(['Nearly done — two minutes.', 'Just bagging it up now.', 'Give me a couple of minutes.']), 200);
+      yield* speak('Staff', G.p(['Nearly done — two minutes.', 'Just bagging it up now.', 'Give me a couple of minutes.']), sp);
       yield* speak('You', 'No problem.', 120);
       phone.gt = .8; yield 1; phone.gt = 0;
-      for (let t = 0, T = G.r(14, 26); t < T; t += DT) { if (Math.random() < DT * .3) Snd.clatter(); yield 0; }
+      for (let t = 0, T = G.r(14, 26), cd = false; t < T; t += DT) { if (chatty && !cd && t > 2) { cd = true; const w0 = world.time; yield* riderChat(S); t += world.time - w0; } if (Math.random() < DT * .3) Snd.clatter(); yield 0; }
       yield* handOver(G.p(['Sorry for the wait.', 'Here you go.', 'Thanks for waiting.']));
       break;
     }
     case 'long': {
       st.mood = 'sour';
-      yield* speak('Staff', G.p(['Sorry mate, we\'re backed up. Another ten?', 'Kitchen\'s slammed — could be a while.', 'Chef\'s only just started yours, sorry.']), 190);
+      yield* speak('Staff', G.p(['Sorry mate, we\'re backed up. Another ten?', 'Kitchen\'s slammed — could be a while.', 'Chef\'s only just started yours, sorry.']), sp);
       yield* speak('You', G.p(['Ten minutes… okay.', 'Right. Fine.']), 115);
       const total = G.r(40, 70), giveUp = G.c(.4) ? total * G.r(.5, .8) : 1e9;
-      let t = 0, told = false;
+      let t = 0, told = false, chatDone = false;
       while (t < total) {
         t += DT; if (Math.random() < DT * .35) Snd.clatter();
+        if (chatty && !chatDone && t > total * .18) { chatDone = true; const w0 = world.time; yield* riderChat(S); t += world.time - w0; }
         if (!told && t > total * .35) { told = true; phone.gt = .9; mutter('Still nothing…', 3); }
         if (told && t > total * .55) phone.gt = 0;
         if (t > giveUp) break;
@@ -233,14 +270,15 @@ function* inShop(tr) {
       }
       phone.gt = 0;
       if (t >= total) { st.mood = 'ok'; yield* handOver(G.p(['Really sorry about that.', 'Here you go, sorry mate.'])); }
-      else { yield* speak('You', 'I\'m going to cancel this one, sorry.', 120); yield* speak('Staff', 'Yeah, fair enough.', 190); yield* cancel(Math.round(tr.pay * .55 * 20) / 20); }
+      else { yield* speak('You', 'I\'m going to cancel this one, sorry.', 120); yield* speak('Staff', 'Yeah, fair enough.', sp); yield* cancel(Math.round(tr.pay * .55 * 20) / 20); }
       break;
     }
     case 'gone': case 'stolen': {
       yield .6;
       const l = tr.outcome === 'gone' ? G.p(['That\'s already been collected.', 'Someone took that about five minutes ago.', 'We handed that to another rider.']) : 'It was on the shelf… someone walked off with the wrong bag.';
-      st.mood = 'sour'; yield* speak('Staff', l, 190);
+      st.mood = 'sour'; yield* speak('Staff', l, sp);
       yield* speak('You', G.p(['Already? Brilliant.', 'Right… great.', 'Ah. Okay.']), 115);
+      if (G.c(.3)) { says("It's all kicking off.", 2.6); yield 2.4; }
       yield .5; yield* cancel(Math.round(tr.pay * .5 * 20) / 20);
       break;
     }
@@ -363,6 +401,13 @@ function* doorstep(tr) {
   yield* speak(c.first, G.p(['Hi!', 'Alright?', 'Oh, hello.', 'Hey — that was quick.']), c.look.female ? 210 : 140);
   yield* speak('You', 'Delivery for ' + c.first + '?', 120);
   yield* speak(c.first, G.p(['Yep, that\'s me.', 'That\'s me, thanks.', 'Yeah, thanks.']), c.look.female ? 210 : 140);
+  yield* speak('You', G.p(['Could I get your four-digit code, please?', 'Can I have the delivery code, please?']), 120);
+  const pitch = c.look.female ? 210 : 140;
+  if (G.c(.3)) { yield* speak(c.first, 'Erm… hang on, where is it…', pitch); phone.gt = 0; yield 2.4; yield* speak(c.first, 'Found it!', pitch); }
+  yield* speak(c.first, "It's " + tr.code.split('').join(', ') + '.', pitch);
+  phone.mode = 'code'; phone.digits = ''; phone.codeOk = false; phone.key = ''; phone.gt = 1; yield .5;
+  for (const ch of tr.code) { phone.digits += ch; phone.key = ch; Snd.tap(); yield .6; }
+  phone.codeOk = true; Snd.beep(); yield 1.1; phone.gt = 0;
   // handover
   Snd.bag(); for (let k = 0; k < 1; k += DT * 1.1) { scene.door.bagT = k; scene.door.arm = Math.min(1, k * 2); yield 0; }
   scene.door.bagT = 1; phone.gt = .7; phone.mode = 'done'; phone.amount = tr.pay; phone.sub = 'Order #' + tr.order; Snd.cash(); yield 1.3;
@@ -381,6 +426,35 @@ function* postTrip(tr) {
   nav.district = world.street.plan.district;
   if (!tr.cancelled) mutter(G.p(['Another one done.', 'Good. Next.', env.rain > .3 ? 'Soaked. Keep going.' : 'Back out again.']), 3);
   yield 1;
+}
+
+// ---------- the occasional spot to camera ----------
+let merchActive = false;
+const MERCH_SCRIPTS = [
+  ['Right, quick word from our sponsor... which is me.', 'This is Holy Water. Little flavour drops. Squeeze some in your bottle and tap water tastes like mango.', 'No sugar, no faff. Code KICKING OFF gets you ten percent off. Right, back to work.'],
+  ['Hydration check, everyone.', 'Holy Water flavour drops. Two squeezes in your water bottle and you are basically on holiday.', 'Link in the description. Cheers!'],
+  ['Sorry, got to do this bit.', 'Holy Water. Peach, lime or cherry. Just drip it into your water.', 'Use code LAST MILE and tell them the rider sent you.'],
+];
+function sayChain(lines, i, onEnd) {
+  if (i >= lines.length) { if (onEnd) onEnd(); return; }
+  const text = lines[i], est = Math.max(1.6, text.length * .055 + .7);
+  caption('', text, est * 1.8 + .6);
+  const tts = Snd.talk(text, 'You', { female: false, pitch: .82, rate: 1.03 });
+  if (!tts) Snd.voice(text, 108, .06);
+  let waited = 0; world.later = world.later || [];
+  const poll = () => {
+    waited += .25;
+    if ((tts && tts.done) || waited > est * 2.4 + 1.5 || (!tts && waited > est)) sayChain(lines, i + 1, onEnd);
+    else world.later.push({ t: world.time + .25, fn: poll });
+  };
+  world.later.push({ t: world.time + .25, fn: poll });
+}
+function canMerch() { return !merchActive && scene.rideActive && !world.turn && phone.mode === 'idle' && world.street && !world.street.veh.some(u => u.emerg); }
+function startMerch() {
+  if (!canMerch()) return false;
+  merchActive = true; scene.merchTarget = 1; Snd.click();
+  sayChain(G.p(MERCH_SCRIPTS), 0, () => { scene.merchTarget = 0; world.later.push({ t: world.time + 1.2, fn: () => { merchActive = false; } }); });
+  return true;
 }
 
 let trips = 0;

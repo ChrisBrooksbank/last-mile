@@ -85,15 +85,21 @@ function updateEnv(dt) {
   const fogness = clamp((env.fog - .006) / .014, 0, 1);
   env.fogC = mixc(mulc(bot, .96), mulc([205, 206, 208], .35 + .65 * env.amb), fogness);
 }
+function fogF(z) {
+  const f = 1 - Math.exp(-z * env.fog);
+  if (z < 100) return f;
+  const e = Math.min(1, (z - 100) / 48), s = e * e * (3 - 2 * e);
+  return f + (1 - f) * s;
+}
 function shade(c, z, k, add) {
   const a = env.amb * (k === undefined ? 1 : k), t = env.tint;
   let r = c[0] * a * t[0], g = c[1] * a * t[1], b = c[2] * a * t[2];
   if (add) { r += add[0]; g += add[1]; b += add[2]; }
-  const f = 1 - Math.exp(-z * env.fog), fc = env.fogC;
+  const f = fogF(z), fc = env.fogC;
   r += (fc[0] - r) * f; g += (fc[1] - g) * f; b += (fc[2] - b) * f;
   return 'rgb(' + (r | 0) + ',' + (g | 0) + ',' + (b | 0) + ')';
 }
-const fogAmt = z => 1 - Math.exp(-z * env.fog);
+const fogAmt = z => fogF(z);
 function clockStr() {
   const h = Math.floor(env.hour), m = Math.floor((env.hour - h) * 60);
   return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;

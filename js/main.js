@@ -2,7 +2,7 @@
 // Frame loop, camera, overlays, HUD, ambient events.
 const hudEl = document.getElementById('hud'), streetEl = document.getElementById('street');
 const STEPS = +(QP.get('speed') || 1);
-let last = performance.now(), hudT = 0, ambT = { horn: G.r(20, 50), siren: G.r(60, 140), bird: 6, chat: G.r(40, 80) }, streetShown = '';
+let last = performance.now(), hudT = 0, ambT = { horn: G.r(20, 50), siren: QP.has('siren') ? 8 : G.r(60, 140), merch: QP.has('merch') ? 9 : G.r(220, 460), bird: 6, chat: G.r(40, 80) }, streetShown = '';
 
 function updateCamera(dt) {
   const S = world.street; if (!S) return;
@@ -32,7 +32,8 @@ function ambient(dt) {
   if (!out) return;
   const D = world.street ? world.street.D : DISTRICTS.soho;
   if ((ambT.horn -= dt) < 0) { ambT.horn = G.r(30, 90) / (D.traffic + .3); if (Math.random() < .6) Snd.horn(G.r(-.8, .8)); }
-  if ((ambT.siren -= dt) < 0) { ambT.siren = G.r(90, 240); Snd.siren(); }
+  if ((ambT.siren -= dt) < 0) { ambT.siren = G.r(100, 260); if (!(scene.rideActive && !world.turn && G.c(.7) && spawnEmergency())) Snd.siren(); }
+  if ((ambT.merch -= dt) < 0) { ambT.merch = G.r(300, 620); if (!startMerch()) ambT.merch = 25; }
   if ((ambT.bird -= dt) < 0) { ambT.bird = G.r(4, 12); if (env.day > .5 && env.rain < .3) Snd.bird(); }
   if ((ambT.chat -= dt) < 0) {
     ambT.chat = G.r(50, 110);
@@ -57,7 +58,8 @@ function render(dt) {
     renderStreet(dt);
     ctx.restore();
     drawWeatherFx(dt, scene.rideActive);
-    if (scene.rideActive) { drawBike(dt); drawPhone(dt, true); }
+    if (world.flashA > .02) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(' + (world.flashPh ? '20,50,150' : '10,20,70') + ',' + (world.flashA * .28).toFixed(3) + ')'; ctx.fillRect(0, 0, SW, SH); ctx.globalCompositeOperation = 'source-over'; }
+    if (scene.rideActive) { drawBike(dt); drawPhone(dt, true); drawMerch(dt); }
     else { if (scene.carry) drawBag(SW * .82, SH * 1.02 + Math.abs(Math.sin(scene.wph)) * -6, SH * .32, scene.carry); if (phone.g > .03) drawPhone(dt, false); }
   } else if (scene.mode === 'tunnel') {
     renderTunnel(dt);

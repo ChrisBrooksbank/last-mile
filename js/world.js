@@ -4,7 +4,7 @@ const world = { time: 0, street: null, trans: null, yaw: 0, tfade: 0 };
 const R = { z: 0, x: -1.3, tx: -1.3, v: 0, dist: 0, filter: false, pass: null, slowT: 0, parkZ: null, parkX: 0, parked: false, ind: 0, braking: false };
 const nav = { queue: [], district: 'soho', arrived: false, lastName: '', wander: true };
 
-const laneX = S => -S.halfW * 0.33;
+const laneX = S => -clamp(S.halfW - 2.9, 1.25, 3.1);
 
 // ---------- plans ----------
 function streetName(district, avoid) {
@@ -82,14 +82,15 @@ function makeStreet(plan) {
   }
   // parked cars
   for (const side of [-1, 1]) {
-    const pr = side < 0 ? D.parked : D.parked * .55; let z = r.r(10, 14);
+    const pr = (halfW >= Math.abs(laneX(S)) + 2.9) ? (side < 0 ? D.parked : D.parked * .55) : 0; let z = r.r(10, 14);
     while (z < S.len + 150) {
       const type = r.c(.14) ? 'van' : 'car', len = type === 'van' ? 5.2 : r.r(3.9, 4.6);
-      const ok = !inGap(side, z - 1) && !inGap(side, z + len + 1) && !(S.dest && S.dest.side === side && Math.abs(z + len / 2 - S.dest.parkZ) < 4.2) && !S.furn.some(f => f.k === 'bus' && f.side === side && Math.abs(f.z - z) < 7);
-      if (r.c(pr) && ok) S.parked.push({ z: z + len / 2, x: side * (halfW - 1.0), len, w: 1.8, h: type === 'van' ? 2.3 : 1.42, type, col: type === 'van' ? r.p([[220, 220, 224], [190, 190, 194], [40, 60, 100]]) : r.p(CAR_COLS), side });
+      const ok = !inGap(side, z - 1) && !inGap(side, z + len + 1) && !(S.dest && S.dest.side === side && (z + len + 1 > S.dest.parkZ - 11 && z - 1 < S.dest.parkZ + 9)) && !S.furn.some(f => f.k === 'bus' && f.side === side && Math.abs(f.z - z) < 7);
+      if (r.c(pr) && ok) S.parked.push({ z: z + len / 2, x: side * (halfW - .95), len, w: 1.8, h: type === 'van' ? 2.3 : 1.42, type, col: type === 'van' ? r.p([[220, 220, 224], [190, 190, 194], [40, 60, 100]]) : r.p(CAR_COLS), side });
       z += len + r.r(.5, 3);
     }
   }
+  S.lw = S.parked.length ? (halfW - 1.85) - Math.abs(laneX(S)) - .12 : 9; // half-width a moving vehicle may have without clipping parked cars
   for (let i = 0; i < S.len / 9; i++) S.patches.push({ z: r.r(-30, S.len + 120), x: r.r(-halfW + .5, halfW - .5), w: r.r(.5, 1.6), l: r.r(1, 3.5), s: r.r(.7, 1.15) });
   return S;
 }
@@ -152,15 +153,16 @@ function mkVeh(S, lane, z) {
   const r = G, q = r.n();
   let type = q < .66 ? 'car' : q < .76 ? 'cab' : q < .86 ? 'van' : q < .93 ? 'bus' : 'bike';
   if (lane === 1 && type === 'bike') type = 'car';
+  if (VDIMS[type][0] / 2 > (S.lw === undefined ? 9 : S.lw)) type = 'car';
   const d = VDIMS[type];
   const col = type === 'cab' ? [22, 22, 26] : type === 'bus' ? [196, 30, 36] : type === 'van' ? r.p([[224, 224, 228], [200, 200, 204], [50, 70, 110], [230, 230, 230]]) : r.p(CAR_COLS);
   const v0 = S.D.cruise * r.r(.62, 1.0) * (type === 'bus' ? .8 : 1);
   const v = { type, lane, z, w: d[0], len: d[1], h: d[2], col, axis: 'z', ph: r.n() * 6 };
-  if (lane === 0) { v.x = type === 'bike' ? -S.halfW * .62 : laneX(S) + r.r(-.15, .15); v.v0 = type === 'bike' ? 4.5 : v0; v.v = v.v0 * .9; v.dir = 1; }
-  else { v.x = -laneX(S) + r.r(-.15, .15); v.v = -r.r(6, 11); v.dir = -1; v.passed = false; }
+  if (lane === 0) { v.x = type === 'bike' ? laneX(S) - .35 : laneX(S) + r.r(-.08, .08); v.v0 = type === 'bike' ? 4.5 : v0; v.v = v.v0 * .9; v.dir = 1; }
+  else { v.x = -laneX(S) + r.r(-.08, .08); v.v0 = r.r(6, 11) * (type === 'bus' ? .8 : 1); v.v = -v.v0; v.dir = -1; v.passed = false; }
   return v;
 }
 function mkPed(S, z) {
-  const r = G, side = r.c(.5) ? 1 : -1;
-  return Object.assign(randomLook(r), { z, x: side * (S.halfW + S.pav * r.r(.3, .85)), dz: (r.c(.5) ? 1 : -1) * r.r(1.05, 1.6), umb: r.c(.85) ? r.p([[30, 30, 36], [140, 30, 40], [40, 60, 110]]) : null, h: r.r(1.55, 1.85), ph: r.n() * 6, phone: r.c(.25), bag: r.c(.2) ? r.p([[90, 60, 40], [30, 30, 34], [150, 40, 50]]) : null });
+  const r = G, side = r.c(.5) ? 1 : -1, ph = r.c(.25);
+  return Object.assign(randomLook(r), { z, x: side * (S.halfW + S.pav * r.r(.3, .85)), dz: (r.c(.5) ? 1 : -1) * r.r(1.05, 1.6), umb: r.c(.85) ? r.p([[30, 30, 36], [140, 30, 40], [40, 60, 110]]) : null, h: r.r(1.55, 1.85), ph: r.n() * 6, phone: ph, basePhone: ph, state: 'walk', t: r.r(0, 6), bag: r.c(.2) ? r.p([[90, 60, 40], [30, 30, 34], [150, 40, 50]]) : null });
 }

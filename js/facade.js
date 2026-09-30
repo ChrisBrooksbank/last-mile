@@ -233,7 +233,7 @@ let _texBudgetT0 = 0;
 function texBudgetReset() { _texBudgetT0 = performance.now(); }
 function getLotTex(S, l) {
   if (l.tex) return l.tex;
-  if (performance.now() - _texBudgetT0 > 7) return null;
+  if ((l.depth || 999) > 40 && performance.now() - _texBudgetT0 > 7) return null;
   l.tex = buildLotTex(S, l);
   return l.tex;
 }
