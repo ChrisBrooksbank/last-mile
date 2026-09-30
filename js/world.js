@@ -166,6 +166,7 @@ function mkLot(S, side, z0, z1, r, dest) {
 }
 
 // ---------- vehicles / pedestrians ----------
+const BUS_ROUTES = [['38', 'Victoria'], ['73', 'Oxford Circus'], ['24', 'Pimlico'], ['12', 'Dulwich'], ['55', 'Oxford Circus'], ['243', 'Waterloo'], ['159', 'Streatham'], ['29', 'Trafalgar Sq'], ['253', 'Euston'], ['19', 'Battersea'], ['341', 'County Hall'], ['N29', 'Wood Green']];
 const VDIMS = { car: [1.8, 4.3, 1.45], cab: [1.9, 4.6, 1.75], van: [2.0, 5.3, 2.4], bus: [2.55, 10.8, 4.3], bike: [.6, 1.7, 1.7] };
 function mkVeh(S, lane, z) {
   const r = G, q = r.n();
@@ -176,6 +177,7 @@ function mkVeh(S, lane, z) {
   const col = type === 'cab' ? [22, 22, 26] : type === 'bus' ? [196, 30, 36] : type === 'van' ? r.p([[224, 224, 228], [200, 200, 204], [50, 70, 110], [230, 230, 230]]) : r.p(CAR_COLS);
   const v0 = S.D.cruise * r.r(.62, 1.0) * (type === 'bus' ? .8 : 1);
   const v = { type, lane, z, w: d[0], len: d[1], h: d[2], col, axis: 'z', ph: r.n() * 6 };
+  if (type === 'bus') v.route = r.i(0, BUS_ROUTES.length - 1);
   if (lane === 0) { v.x = type === 'bike' ? laneX(S) - .35 : laneX(S) + r.r(-.08, .08); v.v0 = type === 'bike' ? 4.5 : v0; v.v = v.v0 * .9; v.dir = 1; }
   else { v.x = -laneX(S) + r.r(-.08, .08); v.v0 = r.r(6, 11) * (type === 'bus' ? .8 : 1); v.v = -v.v0; v.dir = -1; v.passed = false; }
   return v;

@@ -9,7 +9,7 @@ function populate(S) {
 function setPrimary(S, z, x) {
   world.street = S; nav.lastName = S.plan.name; nav.district = S.plan.district;
   R.z = z; R.x = R.tx = x; R.pass = null; R.filter = false; R.slowT = 0; R.parkZ = null; R.parked = false; R.ind = 0;
-  if (S.dest) { R.parkZ = S.dest.parkZ; R.parkX = S.dest.side * (S.halfW - .85); nav.arrived = false; }
+  if (S.dest) { R.parkZ = S.dest.parkZ; R.parkX = S.dest.side * (S.halfW - .6); nav.arrived = false; }
 }
 function loadStreet(plan) { const S = makeStreet(plan); populate(S); setPrimary(S, 0, laneX(S)); return S; }
 
@@ -133,12 +133,33 @@ function updateRider(dt) {
     R.tx = R.pass ? R.pass.x + R.pass.w / 2 + .42 : R.filter ? 0 : (nxt && nxt.turn === 'R' && S.len - R.z < 45) ? -.3 : laneX(S);
   }
   if (Math.abs(R.x - R.tx) > 1.2 && R.v < 4) vs = Math.min(vs, 2.5);
+  // crossing the oncoming lane (to or from the right-hand kerb): wait for a gap rather than cut across a car
+  let crossHold = false;
+  if (!R.pass && Math.max(R.x, R.tx) > -.5 && Math.abs(R.tx - R.x) > .15) {
+    const lo = Math.min(R.x, R.tx) - .45, hi = Math.max(R.x, R.tx) + .45;
+    for (const u of S.veh) {
+      if (u.lane !== 1 || u.z + u.len / 2 < R.z - 1.2 || u.z - u.len / 2 > R.z + 26) continue;
+      const ul = u.x - u.w / 2, uh = u.x + u.w / 2;
+      if (uh < lo || ul > hi || !(uh < R.x - .45 || ul > R.x + .45)) continue;
+      crossHold = true; break;
+    }
+    if (crossHold && R.x > 0) vs = 0;
+  }
+  // hard guard: never ride into anything we overlap sideways (moving, stopped or parked), whatever we are doing
+  let block = null, bgap = 1e9;
+  for (const arr of [S.veh, S.parked]) for (const u of arr) {
+    if (u.type === 'bike' || Math.abs(u.x - R.x) > u.w / 2 + .38) continue;
+    const rear = u.z - u.len / 2; if (rear < R.z - .4) continue;
+    const g = rear - R.z - 1.0; if (g < bgap) { bgap = g; block = u; }
+  }
+  if (block) vs = Math.min(vs, Math.max(0, block.v || 0) + Math.sqrt(2 * 4.5 * Math.max(0, bgap - .2)));
   const before = R.v;
   R.v = Math.max(0, R.v + clamp(vs - R.v, -5.5 * dt, 2.4 * dt));
   R.braking = R.v < before - .02;
   R.z += R.v * dt; R.dist += R.v * dt;
   if (lead && !R.pass && !R.filter) { const gn = lead.z - lead.len / 2 - R.z - .9; if (gn < .25) { R.z = lead.z - lead.len / 2 - 1.15; R.v = Math.min(R.v, Math.max(0, lead.v)); } }
-  R.x += (R.tx - R.x) * (1 - Math.exp(-dt * 1.7));
+  if (block) { const lim = block.z - block.len / 2 - 1.0; if (R.z > lim && R.z < lim + 1.2) { R.z = lim; R.v = Math.min(R.v, Math.max(0, block.v || 0)); } }
+  if (!crossHold) R.x += (R.tx - R.x) * (1 - Math.exp(-dt * 1.7));
   if (R.parkZ != null && !R.parked && R.v < .05 && R.parkZ - R.z < 1.2 && Math.abs(R.x - R.parkX) < .3) { R.parked = true; R.v = 0; nav.arrived = true; }
   R.ind = (nxt && nxt.turn !== 'S' && S.len - R.z < 70 && R.parkZ == null) ? (nxt.turn === 'L' ? -1 : 1) : (R.parkZ != null && !R.parked && R.parkZ - R.z < 40 ? (S.dest ? S.dest.side : Math.sign(R.parkX)) : (R.pass ? 1 : 0));
 }

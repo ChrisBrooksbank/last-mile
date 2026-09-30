@@ -129,7 +129,7 @@ function drawPed(p) {
   if (st === 'cross') { view = 'side'; face = Math.sign(dirn * (FR.a * cam.cs - FR.c * cam.sn)) || 1; }
   else view = (FR.b * dirn * cam.sn + FR.d * dirn * cam.cs) > 0 ? 'back' : 'front';
   const moving = st === 'walk' || st === 'cross';
-  person(Object.assign({}, p, { x: q[0], y: q[1], h, dm, view, face, walk: moving, umb: env.rain > .2 ? p.umb : null, noShadow: h < 14, mood: st === 'chat' ? 'happy' : 'ok', act: st === 'chat' ? (p.t < 1.8 ? 'wave' : 'talk') : null, actT: p.t, phone: view !== 'back' && (st === 'stand' || (moving && p.basePhone)) }));
+  person(Object.assign({}, p, { x: q[0], y: q[1], h, dm, view, face, walk: moving, umb: env.rain > .2 ? p.umb : null, hood: env.rain > .2 && !p.umb && (p.outfit === 'hoodie' || p.outfit === 'coat' || p.outfit === 'puffer' || p.outfit === 'jacket'), noShadow: h < 9, mood: st === 'chat' ? 'happy' : 'ok', act: st === 'chat' ? (p.t < 1.8 ? 'wave' : 'talk') : null, actT: p.t, phone: view !== 'back' && (st === 'stand' || (moving && p.basePhone)) }));
   if (env.lamp > .3 && h > 8) glow(q[0], q[1] - h * .5, h * .5, [255, 200, 140], .05 * env.lamp);
 }
 
@@ -213,7 +213,7 @@ function drawTexWall(S, l, tex, dmin) {
   }
   if (!cols.length) return;
   const nx = l.x < 0 ? 1 : -1, wall = [l.x, 0, l.z0, l.x, 0, l.z1, l.x, h, l.z1, l.x, h, l.z0];
-  const k = nx > 0 ? .9 : 1, ac = [clamp(env.amb * env.tint[0] * k, 0, 1), clamp(env.amb * env.tint[1] * k, 0, 1), clamp(env.amb * env.tint[2] * k, 0, 1)];
+  const k = sunK(nx, 0), ac = [clamp(env.amb * env.tint[0] * k, 0, 1), clamp(env.amb * env.tint[1] * k, 0, 1), clamp(env.amb * env.tint[2] * k, 0, 1)];
   const lb = env.lamp * .24 * Math.max(0, 1 - dmin / 75); ac[0] = Math.min(1, ac[0] + lb); ac[1] = Math.min(1, ac[1] + lb * .78); ac[2] = Math.min(1, ac[2] + lb * .5);
   if (ac[0] < .985 || ac[1] < .985 || ac[2] < .985) { ctx.globalCompositeOperation = 'multiply'; poly('rgb(' + (ac[0] * 255 | 0) + ',' + (ac[1] * 255 | 0) + ',' + (ac[2] * 255 | 0) + ')', wall); ctx.globalCompositeOperation = 'source-over'; }
   if (env.winLit > .04 && dmin < 145) {
@@ -231,21 +231,59 @@ function drawTexWall(S, l, tex, dmin) {
   }
 }
 
+// Direct sun on a wall whose street-local outward normal is (nx, nz): ~0.82 in shade, up to ~1.25 face-on in clear sun.
+// The sun sits 0.55 rad right of world +z (as drawn in the sky), low and warm in the evening.
+function sunK(nx, nz) {
+  const wx = FR.a * nx + FR.b * nz, wz = FR.c * nx + FR.d * nz, lam = Math.max(0, wx * Math.sin(.55) + wz * Math.cos(.55));
+  const sun = env.day * (1 - env.cloud * .85) * (1 - env.rain * .6);
+  return .86 - .08 * sun + lam * sun * .42;
+}
+function drawRoof(l, sg, h, d, pitched) {
+  const z0 = l.z0 + .02, z1 = l.z1 - .02, back = l.x + sg * 8.6;
+  if (pitched) {
+    const rx = l.x + sg * .35, rh = h + 2.4, ridge = l.x + sg * 3.4, mans = l.floors >= 4;
+    const slate = mans ? [62, 66, 76] : [84, 80, 84];
+    poly(shade(slate, d, .95 * sunK(-sg, 0) + .1), [rx, h - .05, z0, rx, h - .05, z1, ridge, rh, z1, ridge, rh, z0]);
+    poly(shade(slate, d, 1.15), [ridge, rh, z0, ridge, rh, z1, back, rh, z1, back, rh, z0]);
+    if (camL.z < z0 || camL.z > z1) { const ez = camL.z < z0 ? z0 : z1; poly(shade(l.col, d, .62), [rx, h - .05, ez, ridge, rh, ez, back, rh, ez, back, h - .05, ez]); }
+    if (d < 60) { // dormers, one over each bay
+      const n = Math.max(1, Math.floor((z1 - z0) / (l.wp || 3))), pitch = (z1 - z0) / n;
+      for (let i = 0; i < n; i++) {
+        const zc = z0 + (i + .5) * pitch, dx0 = l.x + sg * 1.0, dx1 = l.x + sg * 2.4, dw = Math.min(.55, pitch * .28);
+        box(Math.min(dx0, dx1), Math.max(dx0, dx1), h + .5, h + 1.75, zc - dw, zc + dw, mans ? [60, 64, 72] : [210, 206, 198]);
+        box(Math.min(dx0, dx1) - .05, Math.max(dx0, dx1) + .05, h + 1.75, h + 1.85, zc - dw - .08, zc + dw + .08, [56, 58, 64]);
+        if ((camL.x - dx0) * -sg > 0) fr('x', dx0 - sg * .005, zc - dw + .1, zc + dw - .1, h + .65, h + 1.6, env.winLit > .3 && hash(l.seed, i) < l.lit ? emit([255, 214, 150], d, .9) : shade([60, 76, 92], d, 1));
+      }
+    }
+  } else if (l.kind !== 'house' && d < 120 && hash(l.seed, 3) < .6) { // flat roof: lift housing / plant / water tank set back behind the parapet
+    const zc = z0 + (z1 - z0) * (.3 + hash(l.seed, 4) * .4), bx0 = l.x + sg * 2.5, bx1 = l.x + sg * 5;
+    box(Math.min(bx0, bx1), Math.max(bx0, bx1), h - .1, h + 1.6 + hash(l.seed, 5), zc - 1.2, zc + 1.2, mixc(l.col, [150, 150, 150], .5));
+    if (hash(l.seed, 6) < .5) { const ax0 = l.x + sg * 1.2, ax1 = l.x + sg * 2.2; box(Math.min(ax0, ax1), Math.max(ax0, ax1), h - .1, h + .9, zc + 1.6, zc + 2.6, [170, 172, 176]); }
+  }
+}
 function drawLot(S, l, dmin) {
   const d = l.depth, sg = l.x < 0 ? -1 : 1, h = l.h;
   const px = l.side * (S.halfW + S.pav), doorC = l.z0 + l.doorU * (l.z1 - l.z0);
   if (l.setback > .05) poly(shade(l.gcol, d), [px, .01, l.z0, l.x, .01, l.z0, l.x, .01, l.z1, px, .01, l.z1]);
   const endZ = camL.z < l.z0 ? l.z0 : camL.z > l.z1 ? l.z1 : null;
-  if (endZ !== null) poly(shade(l.col, d, .66), [l.x, 0, endZ, l.x + sg * 9, 0, endZ, l.x + sg * 9, h, endZ, l.x, h, endZ]);
-  if ((camL.x - l.x) * (l.x < 0 ? 1 : -1) > 0) {
-    const tex = getLotTex(S, l);
-    if (tex) drawTexWall(S, l, tex, dmin);
-    else poly(shade(l.col, d), [l.x, 0, l.z0, l.x, 0, l.z1, l.x, h, l.z1, l.x, h, l.z0]);
+  const pitched = l.roof === 1 && l.kind !== 'glass' && l.kind !== 'block' && l.pal !== 'modern';
+  // roof behind the parapet: slate mansard / pitched slope with dormers, or a flat roof with plant on it
+  if (d < 170 && l.kind !== 'glass') drawRoof(l, sg, h, d, pitched);
+  if (endZ !== null) { // flank wall: textured brick / render with a chimney breast, weathering, the odd window
+    toCam(l.x, endZ); const fa = _rx / Math.max(_rz, NEAR); toCam(l.x + sg * 9, endZ); const fwid = Math.abs(_rx / Math.max(_rz, NEAR) - fa) * F;
+    if (d < 70 && fwid > 14) drawSlicedQuad(flankTex(l), l.x + sg * 9, endZ, l.x, endZ, 0, h, .72 * sunK(0, endZ === l.z0 ? -1 : 1));
+    else poly(shade(l.col, d, .66), [l.x, 0, endZ, l.x + sg * 9, 0, endZ, l.x + sg * 9, h, endZ, l.x, h, endZ]);
   }
-  if (l.chim && l.kind !== 'glass' && d < 140) {
-    const cz = l.z0 + (l.z1 - l.z0) * .3, cx = l.x + sg * 2.2;
-    box(cx - .4, cx + .4, h - .2, h + 1.5, cz - .4, cz + .4, mulc(l.col, .85));
-    box(cx - .3, cx + .3, h + 1.5, h + 1.9, cz - .3, cz + .3, [150, 90, 70]);
+  if ((camL.x - l.x) * (l.x < 0 ? 1 : -1) > 0) {
+    drawTexWall(S, l, getLotTex(S, l) || genericLotTex(l), dmin);
+    // contact shadow where the wall meets the pavement
+    if (d < 60) { const px2 = l.x - sg * .7; poly('rgba(0,0,0,' + (.16 * env.amb + .04).toFixed(3) + ')', [l.x, .125, l.z0, px2, .125, l.z0, px2, .125, l.z1, l.x, .125, l.z1]); }
+  }
+  if (l.kind !== 'glass' && l.kind !== 'block' && d < 140 && (l.chim || pitched)) { // chimney stack on the party wall, with pots
+    const cz = l.z0 + .05, cx = l.x + sg * (pitched ? 2.6 : 2.2), top = h + (pitched ? 2.9 : 1.6), stk = mulc(l.col, .85);
+    box(cx - .35, cx + .35, h - .2, top, cz - .6, cz + .6, stk);
+    box(cx - .42, cx + .42, top, top + .12, cz - .67, cz + .67, mixc(stk, [210, 205, 195], .4));
+    for (let k = 0; k < 3; k++) { const pz = cz - .4 + k * .4; box(cx - .1, cx + .1, top + .12, top + .5 + (k % 2) * .08, pz - .1, pz + .1, [170, 96, 64]); }
   }
   if (l.front && l.setback > 1) {
     const gh = l.front === 'hedge' ? 1.15 : l.front === 'brick' ? .85 : .95, fc = l.front === 'hedge' ? [46, 88, 42] : l.front === 'brick' ? [130, 80, 66] : [24, 24, 28];
@@ -445,13 +483,27 @@ function texWarm(list) {
     setFrame(it.fr);
     for (const arr of [it.S.L, it.S.Rt]) for (const l of arr) {
       if (l.tex) continue; toCam(l.x, (l.z0 + l.z1) / 2);
-      if (_rz < -40 || _rz > 200) continue; cand.push({ d: Math.abs(_rz), S: it.S, l });
+      if (_rz < -40 || _rz > 260) continue; cand.push({ d: Math.abs(_rz), S: it.S, l });
     }
   }
   if (!cand.length) return;
   cand.sort((a, b) => a.d - b.d);
   const budget = cand[0].d < 60 ? 9 : 3;
   for (const c of cand) { if (performance.now() - t0 > budget) break; c.l.tex = buildLotTex(c.S, c.l); }
+}
+// does segment (ax,az)-(bx,bz) cross or end inside the convex quad q = [x0,z0,..,x3,z3]?
+function segHitsQuad(ax, az, bx, bz, q) {
+  if (Math.max(ax, bx) < Math.min(q[0], q[2], q[4], q[6]) || Math.min(ax, bx) > Math.max(q[0], q[2], q[4], q[6])) return false;
+  if (Math.max(az, bz) < Math.min(q[1], q[3], q[5], q[7]) || Math.min(az, bz) > Math.max(q[1], q[3], q[5], q[7])) return false;
+  const cr = (px, pz, qx, qz, rx, rz) => (qx - px) * (rz - pz) - (qz - pz) * (rx - px);
+  let inside = true, s0 = 0;
+  for (let k = 0; k < 4; k++) {
+    const cx = q[2 * k], cz = q[2 * k + 1], dx = q[(2 * k + 2) % 8], dz = q[(2 * k + 3) % 8];
+    const d1 = cr(ax, az, bx, bz, cx, cz), d2 = cr(ax, az, bx, bz, dx, dz), d3 = cr(cx, cz, dx, dz, ax, az), d4 = cr(cx, cz, dx, dz, bx, bz);
+    if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+    const s = Math.sign(d4); if (s) { if (!s0) s0 = s; else if (s !== s0) inside = false; }
+  }
+  return inside;
 }
 function renderStreet(dt) {
   const S0 = world.street; if (!S0) return;
@@ -472,21 +524,51 @@ function renderStreet(dt) {
     }
   }
   lots.sort((p, q) => q.d - p.d);
-  for (const o of lots) { setFrame(o.fr); drawLot(o.S, o.l, Math.max(o.d - (o.l.z1 - o.l.z0) / 2, 1)); }
+  // world-space footprint of each block (facade line back 9 m, as the end walls are drawn) for occlusion tests
+  for (const o of lots) {
+    const l = o.l, sg = l.x < 0 ? -1 : 1, f = o.fr, q = o.q = new Float64Array(8);
+    const lx = [l.x, l.x + sg * 9, l.x + sg * 9, l.x], lz = [l.z0, l.z0, l.z1, l.z1];
+    let mn = 1e9;
+    for (let k = 0; k < 4; k++) { const X = f.a * lx[k] + f.b * lz[k] + f.tx, Z = f.c * lx[k] + f.d * lz[k] + f.tz; q[2 * k] = X; q[2 * k + 1] = Z; const rz = (X - cam.x) * cam.sn + (Z - cam.z) * cam.cs; if (rz < mn) mn = rz; }
+    o.near = mn; o.bucket = null;
+  }
   const items = [];
-  const add = (it, x, z, f, pad) => { setFrame(it.fr); toCam(x, z); if (_rz > NEAR - (pad || 4) && _rz < FARZ + 5) items.push({ d: _rz, fr: it.fr, f }); };
+  // pts: extra sample points (street-local) spanning the object, so partly hidden vehicles get tested at both ends
+  const add = (it, x, z, f, pad, pts) => {
+    setFrame(it.fr); toCam(x, z); if (!(_rz > NEAR - (pad || 4) && _rz < FARZ + 5)) return;
+    const fr = it.fr, w = [];
+    const pw = (px, pz) => w.push(fr.a * px + fr.b * pz + fr.tx, fr.c * px + fr.d * pz + fr.tz);
+    pw(x, z); if (pts) for (let k = 0; k < pts.length; k += 2) pw(pts[k], pts[k + 1]);
+    items.push({ d: _rz, fr, f, w });
+  };
+  const vpts = v => v.axis === 'x' ? [v.x - v.len / 2, v.z, v.x + v.len / 2, v.z] : [v.x, v.z - v.len / 2, v.x, v.z + v.len / 2];
   for (const it of list) {
     const S = it.S;
     for (const f of S.furn) if (f.z < it.cull) add(it, f.x, f.z, () => drawFurn(S, f), 2);
-    for (const c of S.parked) if (c.z < it.cull) add(it, c.x, c.z, () => drawVeh({ axis: 'z', x: c.x, z: c.z, len: c.len, w: c.w, h: c.h, type: c.type, col: c.col, dir: c.side < 0 ? 1 : -1, brake: false }), 6);
-    for (const v of S.veh) if (v.z < it.cull) add(it, v.x, v.z, () => drawVeh(v), 6);
-    for (const v of S.cross) add(it, v.x, v.z, () => drawVeh(v), 6);
+    for (const c of S.parked) if (c.z < it.cull) add(it, c.x, c.z, () => drawVeh({ axis: 'z', x: c.x, z: c.z, len: c.len, w: c.w, h: c.h, type: c.type, col: c.col, dir: c.side < 0 ? 1 : -1, brake: false }), 6, [c.x, c.z - c.len / 2, c.x, c.z + c.len / 2]);
+    for (const v of S.veh) if (v.z < it.cull) add(it, v.x, v.z, () => drawVeh(v), 6, vpts(v));
+    for (const v of S.cross) add(it, v.x, v.z, () => drawVeh(v), 6, vpts(v));
     for (const p of S.peds) if (p.z < it.cull) add(it, p.x, p.z, () => drawPed(p), 1);
     if (S.signal) add(it, -S.halfW, S.stopZ + .5, () => drawSignal(S), 3);
   }
   if (!scene.rideActive && !world.turn) add(list[0], R.x, R.z, () => drawScooter(R.x, R.z), 3);
   items.sort((p, q) => q.d - p.d);
-  for (const it of items) { setFrame(it.fr); it.f(); }
+  // Anything whose line of sight crosses a block's footprint is painted just before the farthest such block,
+  // so the building covers it (cross traffic at junctions, the other street during a corner swing).
+  const late = [];
+  for (const it of items) {
+    let hit = -1;
+    for (let i = 0; i < lots.length && hit < 0; i++) {
+      const o = lots[i]; if (o.near >= it.d) continue;
+      for (let k = 0; k < it.w.length; k += 2) if (segHitsQuad(cam.x, cam.z, it.w[k], it.w[k + 1], o.q)) { hit = i; break; }
+    }
+    if (hit < 0) late.push(it); else (lots[hit].bucket || (lots[hit].bucket = [])).push(it);
+  }
+  for (const o of lots) {
+    if (o.bucket) for (const it of o.bucket) { setFrame(it.fr); it.f(); }
+    setFrame(o.fr); drawLot(o.S, o.l, Math.max(o.d - (o.l.z1 - o.l.z0) / 2, 1));
+  }
+  for (const it of late) { setFrame(it.fr); it.f(); }
   setFrame(IDENT);
   if (env.night > .45) { ctx.fillStyle = 'rgba(6,8,20,' + ((env.night - .45) * .3).toFixed(2) + ')'; ctx.fillRect(0, 0, SW, SH); }
 }

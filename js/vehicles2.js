@@ -30,69 +30,71 @@ function emergLights(v) {
 }
 
 // ---------- the delivery moped ----------
-const MP = {};
-function paintMoped(view) {
-  const teal = [30, 170, 150], dk = [40, 46, 54];
-  if (view === 'side') {
-    const c = C2(190, 152), g = c.getContext('2d'), X = m => m * 100, Y = m => 148 - m * 100;
-    g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(X(.15), Y(.04), X(1.5), X(.06));
-    // body
-    smoothClosed(g, [[.12, .46], [.1, .78], [.55, .88], [1.0, .82], [1.06, .56], [.86, .34], [.35, .34]], X, Y); g.fillStyle = bodyGradient(g, Y(.9), Y(.34), dk); g.fill();
-    g.fillStyle = 'rgba(255,255,255,.14)'; g.fillRect(X(.15), Y(.86), X(.8), 2);
-    // battery panel + logo
-    g.fillStyle = 'rgba(20,24,28,.7)'; g.fillRect(X(.42), Y(.6), X(.5), X(.16)); g.fillStyle = '#7ce9ff'; g.fillRect(X(.46), Y(.55), X(.12), 2);
-    // floorboard + leg shield
-    g.fillStyle = '#1c2024'; g.fillRect(X(1.0), Y(.3), X(.36), X(.07));
-    smoothClosed(g, [[1.28, .32], [1.32, .68], [1.42, 1.06], [1.54, 1.07], [1.5, .6], [1.44, .3]], X, Y); g.fillStyle = bodyGradient(g, Y(1.06), Y(.3), teal); g.fill();
-    // fork + wheels
-    g.strokeStyle = '#2b2f36'; g.lineWidth = 5; g.beginPath(); g.moveTo(X(1.55), Y(1.02)); g.lineTo(X(1.57), Y(.27)); g.stroke();
-    paintWheel(g, X(.38), Y(.27), X(.27)); paintWheel(g, X(1.57), Y(.27), X(.27));
-    g.fillStyle = rgb(teal); g.beginPath(); g.arc(X(1.57), Y(.27), X(.33), Math.PI * 1.02, Math.PI * 1.92); g.lineTo(X(1.57), Y(.27)); g.fill();
-    g.fillStyle = rgb(dk); g.beginPath(); g.arc(X(.38), Y(.27), X(.31), Math.PI * 1.02, Math.PI * 1.75); g.lineTo(X(.38), Y(.27)); g.fill();
-    // handlebar, mirror, screen, headlight
-    g.fillStyle = '#16181c'; g.fillRect(X(1.38), Y(1.12), X(.26), X(.05));
-    g.strokeStyle = '#16181c'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(X(1.5), Y(1.14)); g.lineTo(X(1.45), Y(1.32)); g.stroke(); g.fillStyle = '#5a6672'; g.beginPath(); g.ellipse(X(1.44), Y(1.34), X(.06), X(.04), 0, 0, TAU); g.fill();
-    g.fillStyle = 'rgba(150,190,220,.5)'; g.beginPath(); g.moveTo(X(1.5), Y(1.14)); g.lineTo(X(1.62), Y(1.02)); g.lineTo(X(1.55), Y(1.02)); g.fill();
-    g.fillStyle = '#f3f0dc'; g.beginPath(); g.ellipse(X(1.68), Y(.94), X(.05), X(.07), 0, 0, TAU); g.fill();
-    // seat + delivery box
-    g.fillStyle = '#0d0e10'; smoothClosed(g, [[.3, .8], [.35, .9], [.95, .9], [1.0, .82]], X, Y); g.fill();
-    g.fillStyle = bodyGradient(g, Y(1.44), Y(.92), teal); g.fillRect(X(-.0), Y(1.44), X(.68), X(.52));
-    g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(0, Y(1.34), X(.68), 2); g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(X(.05), Y(1.02), X(.58), X(.05)); g.fillStyle = 'rgba(255,255,255,.9)'; g.beginPath(); g.arc(X(.34), Y(1.2), X(.09), 0, TAU); g.fill();
-    g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(0, Y(1.44), X(.68), 3);
-    g.fillStyle = '#c22'; g.fillRect(X(0), Y(.7), X(.06), X(.1));
-    g.strokeStyle = '#25282c'; g.lineWidth = 3; g.beginPath(); g.moveTo(X(.75), Y(.34)); g.lineTo(X(.85), Y(.06)); g.stroke();
-    return c;
+// Extrude a convex side profile [[z, y], ...] (counter-clockwise seen from +x) between x0 and x1, culling back faces.
+function extrudeZY(ox, oz, prof, x0, x1, col, dm, gloss) {
+  const n = prof.length, cz = camL.z - oz, cy = cam.h;
+  for (let i = 0; i < n; i++) {
+    const a = prof[i], b = prof[(i + 1) % n], ez = b[0] - a[0], ey = b[1] - a[1], L = Math.hypot(ez, ey) || 1, nz = ey / L, ny = -ez / L;
+    if (nz * (cz - a[0]) + ny * (cy - a[1]) <= 0) continue;
+    const k = .72 + .38 * ny + .08 * nz;
+    poly(shade(col, dm, k), [ox + x0, a[1], oz + a[0], ox + x1, a[1], oz + a[0], ox + x1, b[1], oz + b[0], ox + x0, b[1], oz + b[0]]);
   }
-  const c = C2(62, 152), g = c.getContext('2d'), X = m => m * 100, Y = m => 148 - m * 100, front = view === 'front';
-  g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(X(.08), Y(.03), X(.46), X(.05));
-  g.fillStyle = '#0c0c0e'; g.fillRect(X(.24), Y(.5), X(.14), X(.5)); g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(X(.26), Y(.5), 2, X(.5));
-  smoothClosed(g, [[.14, .5], [.16, .86], [.31, .92], [.46, .86], [.48, .5]], X, Y); g.fillStyle = bodyGradient(g, Y(.9), Y(.5), front ? teal : dk); g.fill();
-  if (front) {
-    g.fillStyle = '#f3f0dc'; g.beginPath(); g.ellipse(X(.31), Y(.85), X(.07), X(.05), 0, 0, TAU); g.fill();
-    g.fillStyle = 'rgba(150,190,220,.45)'; g.fillRect(X(.16), Y(1.1), X(.3), X(.2));
-    g.fillStyle = '#16181c'; g.fillRect(X(.02), Y(1.14), X(.58), X(.04)); g.fillStyle = '#5a6672'; for (const x of [.02, .56]) { g.beginPath(); g.ellipse(X(x), Y(1.3), X(.05), X(.04), 0, 0, TAU); g.fill(); g.fillStyle = '#16181c'; g.fillRect(X(x) - 1, Y(1.28), 2, X(.14)); g.fillStyle = '#5a6672'; }
-    g.fillStyle = 'rgba(230,230,220,.9)'; g.fillRect(X(.22), Y(.6), X(.18), X(.09));
-  } else {
-    g.fillStyle = bodyGradient(g, Y(1.44), Y(.92), teal); g.fillRect(X(.03), Y(1.44), X(.56), X(.52));
-    g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(X(.03), Y(1.34), X(.56), 2); g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(X(.06), Y(1.1), X(.5), X(.05)); g.fillStyle = 'rgba(255,255,255,.9)'; g.beginPath(); g.arc(X(.31), Y(1.26), X(.07), 0, TAU); g.fill();
-    g.fillStyle = '#7d1418'; g.fillRect(X(.08), Y(.98), X(.14), X(.06)); g.fillRect(X(.4), Y(.98), X(.14), X(.06));
-    g.fillStyle = '#e9dd7a'; g.fillRect(X(.21), Y(.66), X(.2), X(.1));
-    g.fillStyle = '#16181c'; g.fillRect(X(.0), Y(.86), X(.62), X(.03));
+  const sx = camL.x > ox + x1 ? x1 : camL.x < ox + x0 ? x0 : null;
+  if (sx === null) return;
+  const pts = []; for (const p of prof) pts.push(ox + sx, p[1], oz + p[0]);
+  poly(shade(col, dm, .84), pts);
+  if (gloss && dm < 14) { // a soft highlight along the upper half of the panel
+    const top = []; let ymax = -1, ymin = 9; for (const p of prof) { ymax = Math.max(ymax, p[1]); ymin = Math.min(ymin, p[1]); }
+    const cut = ymin + (ymax - ymin) * .62; for (const p of prof) if (p[1] >= cut) top.push(ox + sx + (sx > 0 ? .002 : -.002), p[1] - .015, oz + p[0]);
+    if (top.length >= 3) poly('rgba(255,255,255,' + (.12 * env.amb).toFixed(3) + ')', top);
   }
-  return c;
 }
-function drawMoped(x, z) {
-  box(x - .16, x + .16, .32, .78, z - .7, z + .55, [40, 46, 54]);
-  box(x - .26, x + .26, .95, 1.42, z - .94, z - .34, [30, 170, 150]);
-  box(x - .1, x + .1, .78, 1.1, z + .25, z + .75, [30, 170, 150]);
-  const x0 = x - .28, x1 = x + .28, z0 = z - .95, z1 = z + .95;
-  if (camL.x > x1) drawSlicedQuad(MP.side || (MP.side = paintMoped('side')), x1, z0, x1, z1, 0, 1.5, .8);
-  else if (camL.x < x0) drawSlicedQuad(MP.side || (MP.side = paintMoped('side')), x0, z0, x0, z1, 0, 1.5, .8);
-  if (camL.z < z0) drawSlicedQuad(MP.rear || (MP.rear = paintMoped('rear')), x0, z0, x1, z0, 0, 1.5, .95);
-  else if (camL.z > z1) drawSlicedQuad(MP.front || (MP.front = paintMoped('front')), x0, z1, x1, z1, 0, 1.5, .95);
-  const p = Pw(x, .84, z - .96); if (p) glow(p[0], p[1], Math.max(5, F / p[2] * .3), [255, 40, 30], .5);
+const WHEEL_PROF = (() => { const a = []; for (let i = 0; i < 18; i++) { const t = i / 18 * TAU; a.push([Math.cos(t) * .27, .27 + Math.sin(t) * .27]); } return a; })();
+const HUB_PROF = WHEEL_PROF.map(p => [p[0] * .62, .27 + (p[1] - .27) * .62]);
+// y: base height (kerb height when it is parked up on the pavement) - done by lowering the eye for the draw
+function drawMoped(x, z, y) {
+  const h0 = cam.h; cam.h -= y || 0;
+  try { mopedModel(x, z); } finally { cam.h = h0; }
 }
-function drawScooter(x, z) { drawMoped(x, z); }
+function mopedModel(x, z) {
+  const teal = [30, 170, 150], dk = [38, 43, 50], blk = [16, 17, 19], chrome = [150, 156, 162];
+  toCam(x, z); const dm = Math.max(_rz, NEAR);
+  const hub = (wz, hx) => {
+    if (Math.abs(camL.x - x) < hx) return; const sx = x + (camL.x > x ? hx : -hx), a = [], b = [];
+    for (const p of HUB_PROF) { a.push(sx, p[1], wz + p[0]); b.push(sx, .27 + (p[1] - .27) * .3, wz + p[0] * .3); }
+    poly(shade(chrome, dm, 1), a); poly(shade([60, 64, 70], dm, 1), b);
+  };
+  // contact shadow
+  const sh = []; for (let i = 0; i < 12; i++) { const t = i / 12 * TAU; sh.push(x + Math.cos(t) * .34, .005, z + .02 + Math.sin(t) * 1.02); }
+  poly('rgba(0,0,0,' + (.22 + .18 * env.amb).toFixed(3) + ')', sh);
+  const parts = [
+    [-.64, .27, () => { extrudeZY(x, z - .64, WHEEL_PROF, -.06, .06, blk, dm); hub(z - .64, .062); }],
+    [.66, .27, () => { extrudeZY(x, z + .66, WHEEL_PROF, -.055, .055, blk, dm); hub(z + .66, .057); }],
+    [.25, .32, () => extrudeZY(x, z, [[.08, .28], [.52, .28], [.52, .35], [.08, .35]], -.16, .16, [28, 30, 34], dm)],                         // floorboard
+    [-.35, .6, () => extrudeZY(x, z, [[-.42, .3], [.12, .38], [.2, .62], [.12, .8], [-.7, .8], [-.86, .62], [-.84, .44]], -.17, .17, dk, dm, true)], // rear body
+    [-.3, .86, () => extrudeZY(x, z, [[-.74, .8], [.14, .8], [.1, .88], [-.58, .92], [-.74, .87]], -.15, .15, blk, dm)],                         // seat
+    [.68, .65, () => extrudeZY(x, z, [[.64, .26], [.72, .26], [.8, 1.0], [.72, 1.0]], -.035, .035, [42, 46, 52], dm)],                          // fork
+    [.62, .68, () => extrudeZY(x, z, [[.46, .3], [.62, .32], [.74, .62], [.8, 1.04], [.64, 1.08], [.52, .72]], -.2, .2, teal, dm, true)],         // leg shield
+    [.7, 1.1, () => {                                                                                                                            // bars, mirrors, headlight
+      box(x - .35, x + .35, 1.07, 1.11, z + .63, z + .68, blk); box(x - .36, x - .26, 1.06, 1.12, z + .62, z + .69, [24, 24, 26]); box(x + .26, x + .36, 1.06, 1.12, z + .62, z + .69, [24, 24, 26]);
+      for (const s of [-1, 1]) { box(x + s * .25 - .01, x + s * .25 + .01, 1.1, 1.34, z + .64, z + .66, blk); box(x + s * .27 - .06, x + s * .27 + .06, 1.3, 1.39, z + .63, z + .67, [30, 32, 36]); }
+      box(x - .1, x + .1, .9, 1.08, z + .7, z + .84, teal);
+      const hp = Pw(x, .99, z + .845); if (hp && camL.z > z + .84) { const r = Math.max(1.5, F / hp[2] * .055); ctx.fillStyle = env.lamp > .2 || scene.headlight > .3 ? emit([255, 250, 225], hp[2], 1) : shade([220, 222, 214], hp[2], 1.1); ctx.beginPath(); ctx.ellipse(hp[0], hp[1], r * 1.3, r, 0, 0, TAU); ctx.fill(); }
+    }],
+    [-.66, 1.18, () => {                                                                                                                         // delivery box
+      box(x - .2, x + .2, .86, .92, z - .86, z - .44, [26, 28, 30]);
+      const b = box(x - .26, x + .26, .92, 1.46, z - .94, z - .38, teal); if (!b) return;
+      if (b.fzs < 0) { const zz = z - .941; fr('z', zz, x - .26, x + .26, 1.3, 1.315, shade([10, 60, 52], b.dm)); const c = Pw(x, 1.16, zz); if (c) { const r = F / c[2] * .08; ctx.fillStyle = shade([244, 244, 238], c[2]); ctx.beginPath(); ctx.arc(c[0], c[1], r, 0, TAU); ctx.fill(); } }
+      if (b.fxs) { const xx = b.fxs < 0 ? x - .261 : x + .261; fr('x', xx, z - .94, z - .38, 1.3, 1.315, shade([10, 60, 52], b.dm)); fr('x', xx, z - .86, z - .46, 1.0, 1.06, shade([244, 244, 238], b.dm, .95)); }
+    }],
+    [-.88, .7, () => { box(x - .1, x + .1, .66, .74, z - .9, z - .86, [120, 20, 22]); box(x - .09, x + .09, .5, .6, z - .9, z - .87, [230, 214, 90]); }],
+  ];
+  // painter's order inside the model
+  const order = parts.map(p => { toCam(x, z + p[0]); return { d: _rz + Math.abs(camL.x - x) * .02 - p[1] * .001, f: p[2] }; }).sort((a, b) => b.d - a.d);
+  for (const o of order) o.f();
+  const p = Pw(x, .7, z - .91); if (p && camL.z < z - .9) glow(p[0], p[1], Math.max(5, F / p[2] * .3), [255, 40, 30], .35 + .3 * env.night);
+}
+function drawScooter(x, z) { drawMoped(x, z, R.onPave ? .125 : 0); }
 
 // ---------- cyclists ----------
 function drawCyclist(v) {
@@ -123,21 +125,64 @@ function drawHeadlight(dt) {
   const on = hlOn > .5; if (on !== hlWas) { hlWas = on; if (Snd.on) Snd.click(); }
   scene.headlight = hlOn;
   if (hlOn < .03) return;
-  const rzN = 2.2, rzF = 36, fogK = 1 - Math.min(.5, env.fog * 28);
-  const cx = CXs + cam.yawPx, cy = HZ + cam.h * F / 9, rad = SH * .62;
-  ctx.save(); ctx.globalCompositeOperation = 'lighter';
-  // several nested cones give a soft, feathered edge instead of one hard trapezoid
-  for (const k of [1.25, 1.0, .78, .56, .36]) {
-    const hw = z => (.5 + z * .11) * k;
-    const pts = [P(-hw(rzN), 0, rzN), P(-hw(rzF), 0, rzF), P(-hw(rzF) * .9, 2.1, rzF), P(hw(rzF) * .9, 2.1, rzF), P(hw(rzF), 0, rzF), P(hw(rzN), 0, rzN)];
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad), a = hlOn * fogK * .17;
-    g.addColorStop(0, 'rgba(255,246,222,' + (a * 1.5).toFixed(3) + ')'); g.addColorStop(.55, 'rgba(255,240,210,' + (a * .6).toFixed(3) + ')'); g.addColorStop(1, 'rgba(255,236,200,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let q = 1; q < pts.length; q++) ctx.lineTo(pts[q][0], pts[q][1]); ctx.closePath(); ctx.fill();
+  // The beam is rendered as a light map (how much light reaches each pixel), then the frame is multiplied by it:
+  // the scene is copied through the map and added back, so dark asphalt stays dark, white lines and paint pop,
+  // and cars, people and rain in the beam are lit rather than washed over.
+  const gain = hlOn * clamp(1.2 - env.amb, 0, 1) * 5.5; if (gain < .03) return;
+  const W = cv.width, H = cv.height;
+  if (!HLC || HLC.width !== W || HLC.height !== H) { HLC = document.createElement('canvas'); HLC.width = W; HLC.height = H; HLG = HLC.getContext('2d'); }
+  const g = HLG, cx = CXs + cam.yawPx, lampH = .82, wet = clamp(env.wet, 0, 1);
+  // everything the beam can reach lies below its cut-off line, just under the horizon: only work on that band
+  const y0 = clamp(Math.floor((HZ + .012 * F - 6) * DPR), 0, H - 1), bh = H - y0;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.clearRect(0, y0, W, bh); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // dipped beam: ground rows from 2 m to ~48 m. Intensity ~ aim profile x inverse-square; lateral soft falloff;
+  // UK pattern kicks up on the nearside (left) so the kerb and pavement get more reach.
+  const yTop = HZ + cam.h * F / 48, yBot = SH;
+  const I = z => sstep(1.6, 6.5, z) * 1 / (1 + Math.pow(z / 17, 2)) * (1 - .35 * wet);
+  for (let y = Math.floor(yTop); y < yBot; y += 3) {
+    const z = cam.h * F / (y + 1.5 - HZ); if (z < 1.2) continue;
+    const a = I(z); if (a < .004) continue;
+    const hwR = (.45 + z * .2) * F / z, hwL = (.6 + z * .3) * F / z;
+    const lg = g.createLinearGradient(cx - hwL * 1.6, 0, cx + hwR * 1.6, 0);
+    lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(.2, 'rgba(255,255,255,' + (a * .55).toFixed(3) + ')');
+    lg.addColorStop(hwL * 1.6 / (hwL * 1.6 + hwR * 1.6), 'rgba(255,255,255,' + a.toFixed(3) + ')');
+    lg.addColorStop(.86, 'rgba(255,255,255,' + (a * .4).toFixed(3) + ')'); lg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = lg; g.fillRect(cx - hwL * 1.6, y, (hwL + hwR) * 1.6, 3.2);
   }
-  // hot spot on the road just ahead, and a long wet-road reflection down the middle
-  const near = P(0, 0, 7); const sp = ctx.createRadialGradient(near[0], near[1], 0, near[0], near[1], SW * .3);
-  sp.addColorStop(0, 'rgba(255,250,232,' + (.4 * hlOn).toFixed(3) + ')'); sp.addColorStop(1, 'rgba(255,250,232,0)');
-  ctx.save(); ctx.translate(near[0], near[1]); ctx.scale(1, .32); ctx.translate(-near[0], -near[1]); ctx.fillStyle = sp; ctx.fillRect(near[0] - SW * .3, near[1] - SW * .3, SW * .6, SW * .6); ctx.restore();
-  if (env.wet > .2) { const top = P(0, 0, 45)[1], bot = P(0, 0, 3)[1], rg = ctx.createLinearGradient(0, top, 0, bot); rg.addColorStop(0, 'rgba(255,244,214,0)'); rg.addColorStop(1, 'rgba(255,244,214,' + (.16 * env.wet * hlOn).toFixed(3) + ')'); ctx.fillStyle = rg; ctx.fillRect(cx - SW * .05, top, SW * .1, bot - top); }
+  // upright things in the beam (car backs, legs, bollards) sit above the ground rows: light a band up to the
+  // cut-off line, which falls ~1% from the lamp, so it only reaches low on anything far away
+  // (drawn with 'lighten' = max, so overlapping soft half-ellipses never build up rings)
+  const cut = z => HZ + (cam.h - (lampH - .012 * z)) * F / z;
+  g.globalCompositeOperation = 'lighten';
+  for (let z = 3; z < 40; z *= 1.12) {
+    const a = I(z) * .8, yA = cut(z), yB = HZ + cam.h * F / z; if (yB - yA < 2) continue;
+    const hw = (.6 + z * .24) * F / z, ex = cx - hw * .15, ry = yB - yA, rx = hw * 1.35;
+    const rg = g.createRadialGradient(0, 0, 0, 0, 0, 1);
+    rg.addColorStop(0, 'rgba(255,255,255,' + a.toFixed(3) + ')'); rg.addColorStop(.55, 'rgba(255,255,255,' + (a * .75).toFixed(3) + ')'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.save(); g.translate(ex, yB); g.scale(rx, ry); g.fillStyle = rg; g.fillRect(-1, -1, 2, 1); g.restore();
+  }
+  g.globalCompositeOperation = 'source-over';
+  // modulate: light map x frame, added back 'gain' times. 'screen' adds in proportion to (1 - pixel), so dark
+  // surfaces brighten while things that are already bright (lamps, tail lights, glare) are left alone.
+  // (the lit copy is doubled onto itself rather than composited many times: fewer full-band blits)
+  g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-in'; g.drawImage(cv, 0, y0, W, bh, 0, y0, W, bh);
+  let k = gain; g.globalCompositeOperation = 'lighter';
+  while (k > 2.2) { g.drawImage(HLC, 0, y0, W, bh, 0, y0, W, bh); k /= 2; }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'screen';
+  for (; k > .01; k -= 1) { ctx.globalAlpha = Math.min(1, k); ctx.drawImage(HLC, 0, y0, W, bh, 0, y0, W, bh); }
+  ctx.restore();
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  // a little warm fill so pitch-black surfaces still read, and the hot spot just ahead
+  const near = P(0, 0, 8), sp = ctx.createRadialGradient(near[0], near[1], 0, near[0], near[1], SW * .32);
+  sp.addColorStop(0, 'rgba(255,236,200,' + (.05 * hlOn * gain / 5.5).toFixed(3) + ')'); sp.addColorStop(1, 'rgba(255,236,200,0)');
+  ctx.translate(near[0], near[1]); ctx.scale(1, .3); ctx.translate(-near[0], -near[1]); ctx.fillStyle = sp; ctx.fillRect(near[0] - SW * .32, near[1] - SW * .32, SW * .64, SW * .64);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // wet tarmac: a long glossy streak of the lamp mirrored in the road, and the beam visible in rain or fog
+  if (wet > .2) { const top = P(0, 0, 30)[1], bot = P(0, 0, 3)[1]; ctx.save(); ctx.translate(cx, (top + bot) * .55); ctx.scale(1, (bot - top) / (SW * .09)); glow(0, 0, SW * .045, [255, 244, 214], .1 * wet * hlOn); ctx.restore(); }
+  const haze = Math.min(1, env.rain * .9 + Math.max(0, env.fog - .005) * 40) * hlOn;
+  if (haze > .05) { // the beam itself, scattered by rain or fog: a soft wedge of glow ahead, no hard edges
+    const m = P(0, .6, 9); ctx.save(); ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.translate(cx, m[1]); ctx.scale(1.25, .5); glow(0, 0, SH * .55, [255, 240, 214], .09 * haze); ctx.restore();
+  }
   ctx.restore();
 }
+let HLC = null, HLG = null;

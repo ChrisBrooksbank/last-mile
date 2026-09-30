@@ -1,7 +1,7 @@
 'use strict';
 // Painted vehicle views (rear / front / side) drawn as perspective-sliced textures, plus realistic street lamps.
 const VT = {};
-const VPPM = { car: 100, cab: 100, van: 90, bus: 60 };
+const VPPM = { car: 100, cab: 100, van: 90, bus: 80 };
 const VDIM = { car: [1.8, 4.3, 1.45], cab: [1.9, 4.6, 1.75], van: [2.0, 5.3, 2.4], bus: [2.55, 10.8, 4.3] };
 
 function smoothClosed(g, pts, X, Y) {
@@ -54,7 +54,7 @@ const PGLASS = {
 function paintSide(T, col, style, lit, livery) {
   const ppm = VPPM[T], d = VDIM[T], W = Math.round(d[1] * ppm), H = Math.round((d[2] + (livery ? .16 : 0)) * ppm) + 6;
   const c = C2(W, H), g = c.getContext('2d'), X = m => m * ppm, Y = m => H - 3 - m * ppm;
-  if (T === 'bus') return paintBusSide(c, g, col, lit, ppm, W, H, X, Y);
+  if (T === 'bus') return paintBusSide(c, g, col, lit, ppm, W, H, X, Y, style);
   const key = T === 'car' ? 'car' + style : T, pr = PROFILE[key];
   // shadow under the vehicle
   g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(X(.15), Y(.12), X(d[1] - .3), X(.12));
@@ -91,58 +91,13 @@ function paintSide(T, col, style, lit, livery) {
   if (livery) paintLiverySide(g, T, d, X, Y, livery);
   return c;
 }
-function paintBusSide(c, g, col, lit, ppm, W, H, X, Y) {
-  const L = 10.8, Hh = 4.3;
-  g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(X(.2), Y(.12), X(L - .4), X(.14));
-  g.fillStyle = bodyGradient(g, Y(Hh), Y(.4), col); g.beginPath(); g.moveTo(X(.05), Y(.45)); g.lineTo(X(.05), Y(Hh - .2)); g.quadraticCurveTo(X(.05), Y(Hh), X(.3), Y(Hh)); g.lineTo(X(L - .5), Y(Hh)); g.quadraticCurveTo(X(L - .05), Y(Hh), X(L - .05), Y(Hh - .4)); g.lineTo(X(L - .05), Y(.45)); g.closePath(); g.fill();
-  sheen(g, W, H, Y(Hh), Y(.4));
-  g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(X(.05), Y(.62), X(L - .1), X(.2));
-  g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(X(.05), Y(2.42), X(L - .1), 2); g.fillRect(X(.05), Y(.95), X(L - .1), 2);
-  // window rows
-  const win = lit ? '#ffe0a0' : null;
-  for (const row of [[2.72, 3.72], [1.32, 2.28]]) {
-    g.fillStyle = '#12151a'; g.fillRect(X(.25), Y(row[1] + .06), X(L - .5), X(row[1] - row[0] + .12));
-    for (let x = .35; x < L - 1.3; x += 1.12) {
-      if (row[0] < 2 && x > 8.9) continue;
-      const gr = g.createLinearGradient(0, Y(row[1]), 0, Y(row[0])); if (win) { gr.addColorStop(0, '#ffe8b8'); gr.addColorStop(1, '#e0a850'); } else { gr.addColorStop(0, '#8fa5ba'); gr.addColorStop(.5, '#3b4b5d'); gr.addColorStop(1, '#161c25'); }
-      g.fillStyle = gr; g.fillRect(X(x), Y(row[1]), X(1.0), X(row[1] - row[0]));
-    }
-  }
-  // door + ad panel
-  g.fillStyle = '#111'; g.fillRect(X(8.95), Y(2.3), X(1.0), X(1.75)); const dg = g.createLinearGradient(0, Y(2.2), 0, Y(.7)); dg.addColorStop(0, win ? '#ffe0a0' : '#7c92a8'); dg.addColorStop(1, win ? '#c88838' : '#1d2630'); g.fillStyle = dg; g.fillRect(X(9.0), Y(2.2), X(.9), X(1.5));
-  g.fillStyle = 'rgba(240,240,240,.85)'; g.fillRect(X(2.0), Y(1.2), X(4.6), X(.75)); g.fillStyle = 'rgba(200,40,40,.9)'; g.fillRect(X(2.1), Y(1.14), X(2.1), X(.6)); g.fillStyle = 'rgba(40,80,160,.9)'; g.fillRect(X(4.3), Y(1.14), X(2.2), X(.6));
-  g.fillStyle = '#f0f0f0'; g.fillRect(X(9.0), Y(3.98), X(.9), X(.16));
-  for (const x of [1.9, 8.5]) { g.fillStyle = '#08080a'; g.beginPath(); g.arc(X(x), Y(.52), X(.6), Math.PI, 0); g.lineTo(X(x + .6), Y(.3)); g.lineTo(X(x - .6), Y(.3)); g.fill(); paintWheel(g, X(x), Y(.5), X(.5)); }
-  return c;
-}
-
 function paintEnd(T, col, front, style, lit, livery) {
   const ppm = VPPM[T], d = VDIM[T], W = Math.round(d[0] * ppm), H = Math.round((d[2] + (livery ? .16 : 0)) * ppm) + 6;
   const c = C2(W, H), g = c.getContext('2d'), X = m => m * ppm, Y = m => H - 3 - m * ppm, w = d[0];
   const glass = glassGradient(g, Y(d[2]), Y(.9));
   g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(X(.08), Y(.1), X(w - .16), X(.1));
   const tyre = (x0, x1) => { g.fillStyle = '#0c0c0e'; g.beginPath(); g.moveTo(X(x0), Y(0)); g.lineTo(X(x0), Y(.42)); g.lineTo(X(x1), Y(.42)); g.lineTo(X(x1), Y(0)); g.fill(); };
-  if (T === 'bus') {
-    tyre(.1, .48); tyre(w - .48, w - .1);
-    g.fillStyle = bodyGradient(g, Y(d[2]), Y(.4), col); smoothClosed(g, [[.05, .5], [.02, 4.1], [.3, 4.3], [w - .3, 4.3], [w - .02, 4.1], [w - .05, .5]], X, Y); g.fill();
-    g.save(); smoothClosed(g, [[.05, .5], [.02, 4.1], [.3, 4.3], [w - .3, 4.3], [w - .02, 4.1], [w - .05, .5]], X, Y); g.clip(); sheen(g, W, H, Y(4.3), Y(.4));
-    g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, Y(.62), W, X(.2));
-    if (front) {
-      g.fillStyle = '#0d0f12'; g.fillRect(X(.25), Y(4.1), X(w - .5), X(.4)); g.fillStyle = lit ? '#ffb43a' : '#8a5a1c'; g.fillRect(X(.35), Y(4.04), X(w - .7), X(.28));
-      for (const a of [.25, 1.34]) { g.fillStyle = glass; g.fillRect(X(a), Y(3.55), X(.95 + (a > 1 ? .0 : 0)), X(1.35)); g.fillStyle = glass; g.fillRect(X(a), Y(2.35), X(.95), X(.9)); }
-      g.fillStyle = '#0d0f12'; g.fillRect(X(.25), Y(2.28), X(w - .5), X(1.8 * 0 + .06));
-      g.fillStyle = glass; g.fillRect(X(.25), Y(2.15), X(w - .5), X(1.05)); g.fillStyle = '#111'; g.fillRect(X(w / 2 - .02), Y(2.15), X(.04), X(1.05));
-      g.fillStyle = '#1a1c20'; g.fillRect(X(.6), Y(.98), X(w - 1.2), X(.34));
-    } else {
-      g.fillStyle = '#0d0f12'; g.fillRect(X(.25), Y(3.7), X(w - .5), X(1.2)); g.fillStyle = glass; g.fillRect(X(.3), Y(3.66), X(w - .6), X(1.12));
-      g.fillStyle = '#0d0f12'; g.fillRect(X(.4), Y(2.3), X(w - .8), X(.75)); g.fillStyle = glass; g.fillRect(X(.45), Y(2.26), X(w - .9), X(.67));
-      g.fillStyle = '#1a1c20'; for (let i = 0; i < 6; i++) g.fillRect(X(.35), Y(1.4 - i * .1), X(w - .7), X(.05));
-    }
-    g.restore();
-    for (const s of [0, 1]) { const x0 = s ? w - .35 : .12; g.fillStyle = front ? '#d8dcd0' : '#7a1216'; g.fillRect(X(x0), Y(.95), X(.23), X(.3)); }
-    g.fillStyle = '#e8d95a'; g.fillRect(X(w / 2 - .25), Y(.45), X(.5), X(.14));
-    return c;
-  }
+  if (T === 'bus') return paintBusEnd(c, g, col, front, lit, ppm, W, H, X, Y, w, style);
   const isVan = T === 'van', isCab = T === 'cab', bt = isVan ? d[2] - .08 : .9, topW = isVan ? w - .08 : isCab ? w - .15 : w - .35;
   tyre(.12, .4); tyre(w - .4, w - .12);
   // lower body
@@ -223,10 +178,13 @@ function drawSlicedQuad(img, ax, az, bx, bz, y0, y1, faceK, emi, emiA) {
   const amb = LIGHT ? LIGHT.amb[0] : env.amb, a = clamp(amb * faceK, 0, 1), nt = LIGHT ? 0 : env.night;
   g.globalCompositeOperation = 'source-atop';
   if (a < .98) { g.fillStyle = 'rgba(' + (nt * 6 | 0) + ',' + (nt * 10 | 0) + ',' + (nt * 26 | 0) + ',' + (1 - a).toFixed(3) + ')'; g.fillRect(bx0, bt, bx1 - bx0, bb - bt); }
-  if (emi && emiA > .03) {
-    g.globalCompositeOperation = 'source-over'; g.globalAlpha = Math.min(1, emiA);
-    const ew = emi.width, eh2 = emi.height;
-    for (let i = 0; i < cols.length; i += 5) { const sw2 = Math.max(1, (cols[i + 4] - cols[i + 3]) * ew); g.drawImage(emi, Math.min(cols[i + 3] * ew, ew - sw2), 0, sw2, eh2, cols[i], cols[i + 1], step + .5, cols[i + 2] - cols[i + 1]); }
+  // emissive layers (lit windows, LED blinds, lamps) go on after the darkening; emi is an image or a list of [image, alpha]
+  const emis = Array.isArray(emi) ? emi : emi ? [[emi, emiA]] : [];
+  for (const em of emis) {
+    const ea = em[1]; if (!em[0] || !(ea > .03)) continue; const im = lv ? mipOf(em[0], lv) : em[0];
+    g.globalCompositeOperation = 'source-over'; g.globalAlpha = Math.min(1, ea);
+    const ew = im.width, eh2 = im.height;
+    for (let i = 0; i < cols.length; i += 5) { const sw2 = Math.max(1, (cols[i + 4] - cols[i + 3]) * ew); g.drawImage(im, Math.min(cols[i + 3] * ew, ew - sw2), 0, sw2, eh2, cols[i], cols[i + 1], step + .5, cols[i + 2] - cols[i + 1]); }
     g.globalAlpha = 1; g.globalCompositeOperation = 'source-atop';
   }
   const fg = fogNow(Math.max(1, (rmin + rmax) / 2)); if (fg > .01) { g.fillStyle = rgba(fogColNow(), fg); g.fillRect(bx0, bt, bx1 - bx0, bb - bt); }
@@ -239,17 +197,27 @@ function drawVeh(v) {
   let x0, x1, z0, z1;
   if (v.axis === 'z') { x0 = v.x - v.w / 2; x1 = v.x + v.w / 2; z0 = v.z - v.len / 2; z1 = v.z + v.len / 2; }
   else { x0 = v.x - v.len / 2; x1 = v.x + v.len / 2; z0 = v.z - v.w / 2; z1 = v.z + v.w / 2; }
-  const T = v.type, lowTop = T === 'car' ? .88 : T === 'cab' ? 1.0 : v.h - .05;
+  const T = v.type, lowTop = T === 'car' ? .88 : T === 'cab' ? 1.0 : T === 'bus' ? v.h - .45 : v.h - .05;
   poly('rgba(0,0,0,.30)', [x0 - .12, .01, z0 - .12, x1 + .12, .01, z0 - .12, x1 + .12, .01, z1 + .12, x0 - .12, .01, z1 + .12]);
   // inset hull keeps the volume solid between the painted faces
   const y0 = T === 'bus' ? .45 : .28;
+  // "bunny ear" mirrors on arms at the front upper corners: painted before the body when we're looking at the back
+  const busMirrors = T === 'bus' && v.axis === 'z' ? () => {
+    const fz = v.dir > 0 ? z1 : z0, s = v.dir > 0 ? 1 : -1;
+    for (const ex of [x0, x1]) { const o = ex === x0 ? -1 : 1, mx = ex + o * .2;
+      box(Math.min(ex, mx) - .02, Math.max(ex, mx) + .02, 2.34, 2.38, fz + s * .1 - .02, fz + s * .1 + .02, [20, 20, 22]);
+      box(mx - .03, mx + .03, 1.92, 2.36, fz + s * .12 - .12, fz + s * .12 + .12, [22, 22, 24]); }
+  } : null;
+  if (busMirrors && (v.dir > 0 ? camL.z < z1 : camL.z > z0)) busMirrors();
   const body = box(x0 + .04, x1 - .04, y0, lowTop, z0 + .04, z1 - .04, v.col);
   if (!body) return;
   if (T === 'car' || T === 'cab') {
     const glass = mixc(v.col, [22, 30, 42], .78);
     if (v.axis === 'z') box(x0 + .16, x1 - .16, lowTop, v.h - .06, z0 + .9, z1 - .8, glass); else box(x0 + .9, x1 - .8, lowTop, v.h - .06, z0 + .16, z1 - .16, glass);
   }
-  const style = T === 'car' ? ((v.col[0] * 3 + v.col[1] + v.col[2]) | 0) % 3 : 0, az = v.axis === 'z', dm = body.dm, lit = T === 'bus' && env.winLit > .35;
+  const style = T === 'car' ? ((v.col[0] * 3 + v.col[1] + v.col[2]) | 0) % 3 : T === 'bus' ? (v.route || 0) : 0, az = v.axis === 'z', dm = body.dm, lit = false;
+  // buses carry emissive layers: E = LED blinds + lamps (always on), W = saloon lighting (on when it's dull or dark)
+  const busEmi = t => T === 'bus' && t.E ? [[t.E, 1], [t.W, clamp((1 - env.amb) * 1.7 - .15, 0, 1)]] : null;
   let end = null, side = null;
   if (az) {
     if (body.fzs) end = { axis: 'z', plane: body.fzs < 0 ? z0 : z1, h0: x0, h1: x1, front: body.fzs < 0 ? v.dir === -1 : v.dir === 1 };
@@ -261,17 +229,36 @@ function drawVeh(v) {
   if (side) {
     const st = vehTex(T, v.col, 'side', style, lit, v.livery), fwd = v.dir > 0;
     const ra = fwd ? side.h0 : side.h1, rb = fwd ? side.h1 : side.h0;
-    if (side.axis === 'x') drawSlicedQuad(st, side.plane, ra, side.plane, rb, 0, v.h + .02, .78); else drawSlicedQuad(st, ra, side.plane, rb, side.plane, 0, v.h + .02, .78);
+    if (side.axis === 'x') drawSlicedQuad(st, side.plane, ra, side.plane, rb, 0, v.h + .02, .78, busEmi(st)); else drawSlicedQuad(st, ra, side.plane, rb, side.plane, 0, v.h + .02, .78, busEmi(st));
   }
   if (end) {
     const et = vehTex(T, v.col, end.front ? 'front' : 'rear', style, lit, v.livery);
-    if (end.axis === 'z') drawSlicedQuad(et, end.h0, end.plane, end.h1, end.plane, 0, v.h + .02, .95); else drawSlicedQuad(et, end.plane, end.h0, end.plane, end.h1, 0, v.h + .02, .95);
+    if (end.axis === 'z') drawSlicedQuad(et, end.h0, end.plane, end.h1, end.plane, 0, v.h + .02, .95, busEmi(et)); else drawSlicedQuad(et, end.plane, end.h0, end.plane, end.h1, 0, v.h + .02, .95, busEmi(et));
     // lit lamps over the painted housings
     const Wd = end.h1 - end.h0;
     if (end.front) {
       const hl = emit([255, 250, 225], dm, .9);
       fr(end.axis, end.plane, end.h0 + Wd * .09, end.h0 + Wd * .25, .64, .78, hl); fr(end.axis, end.plane, end.h1 - Wd * .25, end.h1 - Wd * .09, .64, .78, hl);
-      if (env.lamp > .2 || env.rain > .3) for (const xx of [end.h0 + Wd * .17, end.h1 - Wd * .17]) { const p = end.axis === 'z' ? Pw(xx, .7, end.plane) : Pw(end.plane, .7, xx); if (p) glow(p[0], p[1], Math.max(4, F / dm * .6), [255, 244, 210], .6 * Math.max(env.lamp, .4)); }
+      const on = Math.max(env.lamp, env.rain > .3 ? .5 : 0);
+      if (on > .15) {
+        // the beams land on the road ahead: a near and a far pool, squashed into perspective
+        const dir = v.dir > 0 ? 1 : -1;
+        for (const [ahead, rad, a] of [[3.5, 2.6, .30], [8, 4.2, .2]]) {
+          const gp = end.axis === 'z' ? Pw(v.x, 0, end.plane + dir * ahead) : Pw(end.plane + dir * ahead, 0, v.z);
+          if (gp) { ctx.save(); ctx.translate(gp[0], gp[1]); ctx.scale(1, .24); glow(0, 0, F / gp[2] * rad, [255, 236, 200], a * on * (1 + env.wet * .5)); ctx.restore(); }
+        }
+        for (const xx of [end.h0 + Wd * .17, end.h1 - Wd * .17]) {
+          const p = end.axis === 'z' ? Pw(xx, .7, end.plane) : Pw(end.plane, .7, xx); if (!p) continue;
+          const rr = Math.max(4, F / dm * .6);
+          glow(p[0], p[1], rr, [255, 244, 210], .6 * on);
+          glow(p[0], p[1], rr * 3.2, [255, 236, 200], .12 * on);                 // wide bloom
+          if (dm < 40) { const fl = ctx.createLinearGradient(p[0] - rr * 4, 0, p[0] + rr * 4, 0); fl.addColorStop(0, 'rgba(255,240,215,0)'); fl.addColorStop(.5, 'rgba(255,240,215,' + (.22 * on).toFixed(3) + ')'); fl.addColorStop(1, 'rgba(255,240,215,0)'); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = fl; ctx.fillRect(p[0] - rr * 4, p[1] - Math.max(.6, rr * .04), rr * 8, Math.max(1.2, rr * .08)); ctx.globalCompositeOperation = 'source-over'; }
+          if (env.wet > .3) { // long glossy reflection running down the wet road towards us
+            const g0 = end.axis === 'z' ? Pw(xx, 0, end.plane) : Pw(end.plane, 0, xx), top = g0 ? g0[1] : p[1] + rr, len = Math.min(SH - top, rr * 7);
+            if (len > 2) { ctx.save(); ctx.translate(p[0], top + len * .42); ctx.scale(1, len / (rr * .7)); glow(0, 0, rr * .35, [255, 236, 200], .5 * env.wet * on); ctx.restore(); }
+          }
+        }
+      }
     } else {
       const br = v.brake ? 1 : .5, tl = emit([255, 40, 34], dm, br);
       fr(end.axis, end.plane, end.h0 + Wd * .07, end.h0 + Wd * .24, .8 * (T === 'bus' ? 1.3 : 1) , .95 * (T === 'bus' ? 1.3 : 1) - (T === 'bus' ? 0 : .05), tl);
@@ -284,7 +271,7 @@ function drawVeh(v) {
       }
     }
   }
-  if (side && T === 'bus' && lit) { /* windows already painted lit */ }
+  if (busMirrors && end && end.front) busMirrors();
   if (v.emerg) emergLights(v);
   if (T === 'cab') { const p = Pw(v.x, v.h + .1, v.z); if (p) { const r = F / dm * .3; ctx.fillStyle = emit([255, 210, 90], dm, .95); ctx.fillRect(p[0] - r, p[1] - r * .35, r * 2, r * .5); glow(p[0], p[1], r * 2.2, [255, 210, 90], .35); } }
 }

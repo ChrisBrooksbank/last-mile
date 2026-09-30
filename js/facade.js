@@ -142,16 +142,13 @@ function buildLotTex(S, l) {
       if (w < .5) return;
       rc(a, '#15171a', x0 - .04, .5 - .04, w + .08, 2.4 + .08);
       const g = a.createLinearGradient(0, H - 2.9 * ppm, 0, H - .5 * ppm); g.addColorStop(0, '#f4dcaa'); g.addColorStop(1, '#a8804e'); a.fillStyle = g; a.fillRect.apply(a, mm(x0, .5, w, 2.4));
-      // display: shelves & goods
-      const nm = l.name; const cafe = /CAF|COFFEE|BAKERY|DELI/.test(nm), market = /MARKET|SUPERMARKET|OFF LIC/.test(nm);
-      for (let sh = 0; sh < 3; sh++) { const yy = .75 + sh * .75; rc(a, 'rgba(70,46,30,.8)', x0, yy, w, .05); for (let gx2 = x0 + .1; gx2 < x0 + w - .2; gx2 += .22 + r.n() * .2) { const cc = market ? r.p([[200, 60, 50], [230, 180, 40], [70, 150, 70], [240, 240, 230]]) : cafe ? r.p([[230, 200, 150], [170, 110, 70], [240, 240, 235], [190, 80, 80]]) : r.p([[60, 80, 120], [200, 200, 190], [140, 70, 70], [50, 50, 56]]); rc(a, rgb(cc), gx2, yy + .05, .14 + r.n() * .1, .18 + r.n() * .25); } }
-      if (/BARBER|NAILS|VINTAGE|TAILOR|OPTICIAN|BOOKS|GYM|DENTIST|PHONE/.test(nm)) { rc(a, 'rgba(30,30,40,.55)', x0 + w * .55, .5, w * .4, 2.4); }
+      // display: what you see through the glass depends on the kind of shop
+      shopDisplay(a, e, rc, r, l.name, x0, w, ppm, H);
       // ceiling lights
       for (let lx = x0 + .4; lx < x0 + w - .2; lx += .9) rc(a, 'rgba(255,255,240,.95)', lx, 2.75, .35, .05);
       // reflection
       a.fillStyle = 'rgba(255,255,255,.12)'; a.beginPath(); a.moveTo(x0 * ppm, H - .5 * ppm); a.lineTo((x0 + w * .4) * ppm, H - .5 * ppm); a.lineTo((x0 + w * .7) * ppm, H - 2.9 * ppm); a.lineTo(x0 * ppm, H - 2.9 * ppm); a.fill();
-      e.fillStyle = 'rgba(255,214,150,.75)'; e.fillRect.apply(e, mm(x0, .5, w, 2.4));
-      e.fillStyle = 'rgba(60,30,10,.5)'; for (let sh = 0; sh < 3; sh++) e.fillRect.apply(e, mm(x0, .75 + sh * .75, w, .05));
+      e.save(); e.globalCompositeOperation = 'destination-over'; e.fillStyle = /PHARM|CHEMIST|OPTIC|DENTIST|LAUNDR|PHONE|VAPE|GYM|SUPERMARKET|MINI/.test(l.name) ? 'rgba(236,244,255,.8)' : 'rgba(255,214,150,.75)'; e.fillRect.apply(e, mm(x0, .5, w, 2.4)); e.restore();
     };
     win(.55, dx0 - .75); win(dx0 + dw + .2, len - (dx0 + dw + .2) - .55);
     // pilasters
@@ -227,6 +224,106 @@ function buildLotTex(S, l) {
   for (let i = 0; i < 9; i++) { const bx = r.n() * len, bw = 1 + r.n() * 3; g = a.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(0,0,0,.0)'); g.addColorStop(1, 'rgba(0,0,0,' + (0.04 + r.n() * .06).toFixed(3) + ')'); a.fillStyle = g; a.fillRect(bx * ppm, 0, bw * ppm, H); }
   if (l.graffiti) for (let i = 0; i < 5; i++) { a.fillStyle = rgb(r.p([[230, 60, 120], [60, 200, 230], [240, 220, 40], [120, 220, 90]])); a.beginPath(); a.ellipse(r.r(.5, len - .5) * ppm, H - r.r(.5, 2.2) * ppm, ppm * r.r(.3, .9), ppm * r.r(.2, .5), r.n() * 3, 0, TAU); a.fill(); }
   return { A, E, W, H, ppm, len, mips: [null, null, null] };
+}
+
+// ---------- what's in the shop window ----------
+// a = albedo, e = emissive (lit at night); rc(ctx, col, x, y, w, h) in metres; the window spans x0..x0+w, y .5..2.9
+function shopDisplay(a, e, rc, r, nm, x0, w, ppm, H) {
+  const both = (col, ecol, x, y, ww, hh) => { rc(a, col, x, y, ww, hh); if (ecol) rc(e, ecol, x, y, ww, hh); };
+  const x1 = x0 + w, pick = arr => arr[(r.n() * arr.length) | 0];
+  if (/CAF|COFFEE|BAKERY|DELI/.test(nm)) {
+    rc(a, 'rgba(120,84,56,.9)', x0, .5, w, .95); rc(a, 'rgba(230,220,200,.9)', x0, 1.45, w, .06);   // counter
+    for (let x = x0 + .15; x < x1 - .3; x += .34) both(rgb(pick([[214, 170, 110], [150, 96, 60], [236, 224, 200], [200, 120, 110]])), 'rgba(80,50,20,.35)', x, 1.51, .26, .12 + r.n() * .08);   // cakes
+    for (let x = x0 + .4; x < x1 - .2; x += 1.1) { rc(a, 'rgba(30,26,24,.9)', x, 2.2, .02, .5); both('rgba(40,36,32,.95)', 'rgba(255,236,190,1)', x - .12, 2.08, .26, .14); }   // pendant lamps
+    rc(a, 'rgba(250,250,250,.85)', x0 + .1, 1.9, .6, .03);
+  } else if (/PHARM|CHEMIST|OPTIC|DENTIST/.test(nm)) {
+    rc(a, 'rgba(236,240,244,.95)', x0, .5, w, 2.4);
+    for (let x = x0 + .1; x < x1 - .6; x += .9) { rc(a, 'rgba(210,216,222,.95)', x, .6, .7, 1.8); for (let y = .8; y < 2.3; y += .32) for (let k = 0; k < 4; k++) rc(a, rgb(pick([[60, 120, 190], [230, 230, 236], [200, 70, 90], [90, 170, 120]])), x + .06 + k * .16, y, .1, .14); }
+    rc(a, 'rgba(250,252,255,.9)', x0, .5, w, .55);                      // frosted band
+    if (/PHARM|CHEMIST/.test(nm)) { const cx = x0 + w / 2; both('rgba(30,150,80,.95)', 'rgba(60,255,140,1)', cx - .09, 2.3, .18, .5); both('rgba(30,150,80,.95)', 'rgba(60,255,140,1)', cx - .25, 2.46, .5, .18); }
+  } else if (/BARBER|NAILS/.test(nm)) {
+    rc(a, 'rgba(210,214,220,.9)', x0, 1.2, w, 1.3);                     // mirror wall
+    for (let x = x0 + .3; x < x1 - .4; x += 1.1) { rc(a, 'rgba(24,24,28,.95)', x, .5, .55, .45); rc(a, 'rgba(24,24,28,.95)', x + .05, .95, .45, .5); rc(a, 'rgba(160,160,170,.9)', x + .22, .5, .08, .2); }
+    if (/BARBER/.test(nm)) for (let k = 0; k < 6; k++) both(k % 2 ? 'rgba(200,30,40,.95)' : 'rgba(240,240,240,.95)', k % 2 ? 'rgba(255,60,60,1)' : 'rgba(255,255,255,1)', x0 + .05, .9 + k * .2, .12, .2);
+  } else if (/PUB/.test(nm)) {
+    rc(a, 'rgba(90,50,24,.95)', x0, .5, w, 2.4);
+    for (let y = 1.7; y < 2.6; y += .28) for (let x = x0 + .1; x < x1 - .1; x += .12) both(rgb(pick([[90, 140, 60], [150, 90, 40], [200, 200, 180], [60, 40, 30]])), 'rgba(255,190,90,.6)', x, y, .06, .2);
+    rc(a, 'rgba(230,226,210,.55)', x0, .5, w, 1.0);                      // etched glass
+    for (let x = x0 + .2; x < x1; x += .5) rc(a, 'rgba(255,255,255,.25)', x, .9, .25, .04);
+  } else if (/LAUNDR/.test(nm)) {
+    rc(a, 'rgba(230,234,238,.95)', x0, .5, w, 2.4);
+    for (let x = x0 + .1; x < x1 - .6; x += .7) for (const y of [.55, 1.3]) {
+      rc(a, 'rgba(240,240,244,1)', x, y, .6, .68);
+      a.fillStyle = 'rgba(60,70,84,.95)'; a.beginPath(); a.arc((x + .3) * ppm, H - (y + .34) * ppm, .22 * ppm, 0, TAU); a.fill();
+      a.fillStyle = rgb(pick([[150, 190, 230], [220, 220, 230], [200, 120, 140]])); a.beginPath(); a.arc((x + .3) * ppm, H - (y + .32) * ppm, .15 * ppm, 0, TAU); a.fill();
+    }
+  } else if (/VINTAGE|TAILOR/.test(nm)) {
+    rc(a, 'rgba(60,60,64,.95)', x0 + .1, 2.3, w - .2, .04);              // rail of clothes
+    for (let x = x0 + .15; x < x1 - .2; x += .16 + r.n() * .06) rc(a, rgb(pick([[140, 40, 50], [40, 60, 110], [200, 180, 140], [30, 30, 34], [90, 120, 80], [180, 120, 60]])), x, 1.2 + r.n() * .25, .14, 1.05);
+    rc(a, 'rgba(230,224,214,.9)', x0 + w * .7, .5, .35, 1.7); rc(a, 'rgba(230,224,214,.9)', x0 + w * .7 - .08, 1.9, .5, .22);   // mannequin
+  } else if (/PHONE|VAPE/.test(nm)) {
+    for (let x = x0 + .2; x < x1 - .5; x += .9) { rc(a, 'rgba(210,220,230,.5)', x, .5, .7, 1.0); for (let k = 0; k < 3; k++) both('rgba(20,22,26,.95)', 'rgba(120,200,255,.8)', x + .08 + k * .2, 1.1, .12, .22); }
+    both('rgba(60,20,70,.9)', /VAPE/.test(nm) ? 'rgba(255,60,220,1)' : 'rgba(60,200,255,1)', x0 + w * .2, 2.1, w * .6, .12);   // neon strip
+  } else if (/FLORIST/.test(nm)) {
+    for (let x = x0 + .05; x < x1 - .2; x += .28) { rc(a, 'rgba(60,70,60,.95)', x, .5, .24, .4); for (let k = 0; k < 5; k++) rc(a, rgb(pick([[230, 60, 90], [250, 200, 60], [250, 250, 245], [200, 110, 200], [250, 130, 60]])), x + r.n() * .2, .9 + r.n() * .35, .07, .07); rc(a, 'rgba(60,120,50,.9)', x + .05, .85, .14, .12); }
+  } else if (/GYM/.test(nm)) {
+    rc(a, 'rgba(30,32,36,.9)', x0, .5, w, 2.4); rc(a, 'rgba(240,240,240,.85)', x0, 1.3, w, .5);
+    for (let x = x0 + .3; x < x1 - .3; x += 1.2) { rc(a, 'rgba(10,10,12,1)', x, .55, .9, .25); rc(a, 'rgba(90,90,96,1)', x + .1, .8, .08, .45); }
+  } else if (/BOOKS/.test(nm)) {
+    for (let sh = 0; sh < 3; sh++) { const yy = .75 + sh * .75; rc(a, 'rgba(70,46,30,.8)', x0, yy, w, .05); for (let gx2 = x0 + .05; gx2 < x1 - .1; gx2 += .05 + r.n() * .04) rc(a, rgb(pick([[140, 40, 40], [40, 60, 100], [200, 190, 160], [60, 90, 60], [30, 30, 34]])), gx2, yy + .05, .04, .22 + r.n() * .12); }
+  } else { // newsagent / mini market / supermarket / off licence / wine: stocked shelves and window posters
+    const drinks = /WINE|OFF LIC/.test(nm);
+    for (let sh = 0; sh < 3; sh++) { const yy = .75 + sh * .75; rc(a, 'rgba(200,200,196,.8)', x0, yy, w, .04); for (let gx2 = x0 + .08; gx2 < x1 - .15; gx2 += .1 + r.n() * .08) rc(a, rgb(drinks ? pick([[90, 30, 40], [60, 90, 50], [200, 190, 120], [40, 40, 44]]) : pick([[200, 60, 50], [230, 180, 40], [70, 150, 70], [240, 240, 230], [60, 90, 170]])), gx2, yy + .04, .08, drinks ? .3 : .12 + r.n() * .16); }
+    for (let k = 0; k < 2; k++) { const px = x0 + .2 + r.n() * Math.max(0, w - 1); rc(a, rgb(pick([[250, 210, 40], [220, 40, 40], [40, 120, 200]])), px, 1.6, .55, .75); rc(a, 'rgba(255,255,255,.9)', px + .05, 1.9, .45, .08); }
+  }
+}
+
+// ---------- cheap shared fallbacks: a distant facade, and a blank flank (end) wall ----------
+const GENTX = {};
+function genericLotTex(l) {
+  const len = Math.max(4, Math.round((l.z1 - l.z0) / 2) * 2), key = l.pal + '|' + l.kind + '|' + l.col.map(v => v | 0).join(',') + '|' + l.floors + '|' + len + '|' + (l.shopCol ? l.shopCol.join(',') : '');
+  if (GENTX[key]) return GENTX[key];
+  const ppm = 6, W = len * ppm, H = Math.max(8, Math.round(l.h * ppm)), A = C2(W, H), E = C2(W, H), a = A.getContext('2d'), e = E.getContext('2d'), r = new RNG(hash(len, l.floors, l.col[0]) * 1e9);
+  const mm = (x, y, w, h) => [x * ppm, H - (y + h) * ppm, w * ppm, h * ppm];
+  const glass = l.kind === 'glass', plain = l.pal === 'stucco' || l.kind === 'block' || l.pal === 'concrete';
+  if (glass) { const g = a.createLinearGradient(0, 0, 0, H); g.addColorStop(0, rgb(mixc(l.col, [190, 214, 240], .5))); g.addColorStop(1, rgb(mulc(l.col, .6))); a.fillStyle = g; a.fillRect(0, 0, W, H); }
+  else if (plain) { a.fillStyle = rgb(l.col); a.fillRect(0, 0, W, H); }
+  else { const s = ppm / 40; a.save(); a.scale(s, s); a.fillStyle = a.createPattern(brickTile(l.col), 'repeat'); a.fillRect(0, 0, W / s, H / s); a.restore(); }
+  const n = Math.max(1, Math.floor(len / (l.wp || 3))), pitch = len / n;
+  for (let f = 1; f < l.floors; f++) {
+    const yb = l.gh + (f - 1) * l.fh;
+    if (!glass && f === 1) { a.fillStyle = 'rgba(230,224,210,.8)'; a.fillRect.apply(a, mm(0, yb - .4, len, .15)); }
+    for (let i = 0; i < n; i++) {
+      const ww = glass ? pitch * .9 : Math.min(1.1, pitch * .5), hh = glass ? l.fh * .7 : 1.7, x = (i + .5) * pitch - ww / 2, y = yb + (glass ? .2 : .6);
+      a.fillStyle = glass ? 'rgba(20,30,44,.35)' : '#2c3440'; a.fillRect.apply(a, mm(x, y, ww, hh));
+      a.fillStyle = 'rgba(160,190,215,.25)'; a.fillRect.apply(a, mm(x, y + hh * .5, ww, hh * .5));
+      if (r.c(l.lit || .3)) { e.fillStyle = rgbaS(r.c(.75) ? [255, 214, 150] : [200, 220, 255], .9); e.fillRect.apply(e, mm(x, y, ww, hh)); }
+    }
+  }
+  if (l.kind === 'shop') { a.fillStyle = rgb(l.shopCol || [40, 40, 44]); a.fillRect.apply(a, mm(0, 3, len, .6)); a.fillStyle = '#c9a676'; a.fillRect.apply(a, mm(.5, .5, len - 1, 2.4)); e.fillStyle = 'rgba(255,214,150,.8)'; e.fillRect.apply(e, mm(.5, .5, len - 1, 2.4)); }
+  else if (!glass) { a.fillStyle = 'rgba(0,0,0,.35)'; a.fillRect.apply(a, mm(len * .5 - .5, 0, 1, 2.3)); }
+  if (!glass) { a.fillStyle = 'rgba(232,226,212,.9)'; a.fillRect.apply(a, mm(0, l.h - .5, len, .5)); }
+  const g = a.createLinearGradient(0, H - 1.2 * ppm, 0, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.3)'); a.fillStyle = g; a.fillRect(0, H - 1.2 * ppm, W, 1.2 * ppm);
+  return (GENTX[key] = { A, E, W, H, ppm, len, mips: [null, null, null], generic: true });
+}
+const FLANK = {};
+function flankTex(l) {
+  const hb = Math.max(3, Math.round(l.h)), key = l.pal + '|' + l.kind + '|' + l.col.map(v => v | 0).join(',') + '|' + hb + '|' + (l.graffiti ? 1 : 0);
+  if (FLANK[key]) return FLANK[key];
+  const ppm = 14, W = 9 * ppm, H = hb * ppm, c = C2(W, H), a = c.getContext('2d'), r = new RNG(hash(hb, l.col[1], 7) * 1e9);
+  const glass = l.kind === 'glass';
+  if (glass) { const g = a.createLinearGradient(0, 0, W, 0); g.addColorStop(0, rgb(mulc(l.col, .8))); g.addColorStop(1, rgb(mulc(l.col, .55))); a.fillStyle = g; a.fillRect(0, 0, W, H); a.fillStyle = 'rgba(20,28,40,.5)'; for (let x = 0; x < W; x += 1.5 * ppm) a.fillRect(x, 0, 1, H); }
+  else if (l.pal === 'stucco' || l.pal === 'concrete' || l.kind === 'block') { a.fillStyle = rgb(mulc(l.col, .92)); a.fillRect(0, 0, W, H); for (let i = 0; i < 300; i++) { a.fillStyle = r.c(.5) ? 'rgba(0,0,0,.05)' : 'rgba(255,255,255,.05)'; a.fillRect(r.n() * W, r.n() * H, 2, 2); } }
+  else { const s = ppm / 40; a.save(); a.scale(s, s); a.fillStyle = a.createPattern(brickTile(mulc(l.col, .95)), 'repeat'); a.fillRect(0, 0, W / s, H / s); a.restore(); }
+  if (!glass) {
+    if (r.c(.5)) { const cw = 1.4 * ppm, cx = r.r(2, 5) * ppm; a.fillStyle = 'rgba(0,0,0,.14)'; a.fillRect(cx, 0, cw, H); a.fillStyle = 'rgba(255,255,255,.06)'; a.fillRect(cx, 0, 3, H); }   // chimney breast
+    for (let y = 3; y < hb - 2; y += 3.2) if (r.c(.35)) { a.fillStyle = '#2a3038'; a.fillRect(r.r(1, 6.5) * ppm, H - (y + 1.2) * ppm, .6 * ppm, 1 * ppm); }   // odd small window
+    a.fillStyle = 'rgba(0,0,0,.35)'; a.fillRect(0, 0, W, .35 * ppm);
+    for (let i = 0; i < 6; i++) { const x = r.n() * W, g = a.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(0,0,0,.08)'); g.addColorStop(1, 'rgba(0,0,0,0)'); a.fillStyle = g; a.fillRect(x, 0, r.r(.5, 2) * ppm, H); }   // rain streaks
+    if (l.graffiti) { a.fillStyle = rgb(r.p([[230, 60, 120], [60, 200, 230], [240, 220, 40]])); a.font = '900 ' + (1.1 * ppm | 0) + 'px Impact,Arial'; a.fillText(r.p(['SKORE', 'MOTH', 'LDN', 'KRIS']), 1 * ppm, H - .6 * ppm); }
+  }
+  const g = a.createLinearGradient(0, H - 1.5 * ppm, 0, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.35)'); a.fillStyle = g; a.fillRect(0, H - 1.5 * ppm, W, 1.5 * ppm);
+  return (FLANK[key] = c);
 }
 
 let _texBudgetT0 = 0;

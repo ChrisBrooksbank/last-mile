@@ -136,15 +136,37 @@ function* walkTo(z, speed, lx) {
 }
 function* dismount() {
   R.v = 0; Snd.stand(); yield .5;
-  beginWalk(); phone.gt = 0; yield .4;
+  beginWalk(); phone.gt = 0;
+  // wheel it up onto the pavement edge, clear of the traffic, then step off a pace
+  const S = world.street, side = S.dest ? S.dest.side : -1, px = side * (S.halfW + S.pav * .38);
+  R.x = side * (S.halfW + .42); R.onPave = true;
+  for (let t = 0; t < .9; t += DT) { const k = 1 - Math.exp(-DT * 4); scene.wx += (px - scene.wx) * k; scene.wz += DT * .9; scene.wph += DT * 5; yield 0; }
+}
+// walk back along the pavement, then step off the kerb to the moped with it in full view
+function* walkBackToMoped(parkZ, speed) {
+  const dir = Math.sign(parkZ - scene.wz) || -1;
+  yield* walkTo(parkZ - dir * 3.2, speed);
+  if (dir !== scene.wdir) yield* turnFace(dir);
+  const S = world.street, side = S.dest ? S.dest.side : -1, z1 = parkZ - dir * 1.9, x1 = R.x + side * .6;
+  while ((z1 - scene.wz) * dir > .03) {
+    scene.wz += dir * Math.min(speed * .7 * DT, (z1 - scene.wz) * dir);
+    scene.wx += (x1 - scene.wx) * (1 - Math.exp(-DT * 2.2));
+    const prev = scene.wph; scene.wph += DT * speed * 2.6;
+    if (Math.floor(scene.wph / Math.PI) !== Math.floor(prev / Math.PI)) Snd.step('street');
+    yield 0;
+  }
+  for (let t = 0; t < .7; t += DT) { scene.wx += (x1 - scene.wx) * (1 - Math.exp(-DT * 3)); yield 0; }
 }
 function* mount(plans, target) {
-  Snd.stand(); yield .5;
+  Snd.stand(); yield .3;
+  yield* fade(1, .25);
   scene.walking = false; scene.rideActive = true; scene.look = 0; scene.wdir = 1; scene.carry = null;
+  if (R.onPave) { R.onPave = false; R.x = Math.sign(R.x) * (world.street.halfW - .6); }
   R.parked = false; R.parkZ = null; R.tx = laneX(world.street); R.v = 0; nav.arrived = false;
   nav.wander = false; nav.queue = plans ? plans.slice() : [];
   if (!plans) nav.wander = true;
-  yield .6;
+  yield* fade(0, .3);
+  yield .3;
 }
 function* stepTunnel(zTarget, speed, kind) {
   const t = scene.tun;
@@ -209,7 +231,7 @@ function* doPickup(tr) {
   yield* fade(0, .4);
   if (!tr.cancelled) scene.carry = tr.cu.col;
   scene.look = 0;
-  yield* walkTo(dest.parkZ, 1.9);
+  yield* walkBackToMoped(dest.parkZ, 1.9);
   yield* mount(tr.cancelled ? null : tr.plans2);
   if (!tr.cancelled) {
     phone.mode = 'nav'; phone.target = 'DELIVER'; phone.sub = tr.cust.name; phone.sub2 = tr.cust.addr; phone.order = tr.order; phone.amount = tr.pay;
@@ -372,7 +394,7 @@ function* doDelivery(tr) {
   yield* fade(1, .5);
   scene.mode = 'street'; scene.tun = null; scene.extra = null; scene.door = null; scene.look = 0; scene.wz = doorZ; scene.wx = dest.side * (S().halfW + S().pav * .8);
   yield* fade(0, .4);
-  yield* walkTo(dest.parkZ, 1.95);
+  yield* walkBackToMoped(dest.parkZ, 1.95);
   scene.carry = null;
   yield* mount(null);
 }
@@ -384,9 +406,10 @@ function* doorstep(tr) {
     const dr = scene.door;
     if (dr.open > .02) drawDoorway(t, z, dr.open, dr.cust, dr.arm);
     if (dr.bagT >= 0) {
-      const r = t.doorRect, rz = Math.max(r.z - z, .6), hand = P(0.55 - cam.x, r.y0 + 1.15, rz + .3), k = clamp(dr.bagT, 0, 1), e = k * k * (3 - 2 * k);
-      const x = lerp(SW * .8, hand[0], e), y = lerp(SH * .95, hand[1] + 10, e), s = lerp(SH * .3, F / rz * .3, e);
-      drawBag(x, y, s, tr.cu.col);
+      // the customer stands 0.7 m inside the door; their reaching hand ends ~0.45 m right, 1.17 m up
+      const r = t.doorRect, rz = Math.max(r.z - z, .6), cz = rz + .7, hand = P(.45 - cam.x, r.y0 + 1.17, cz), k = clamp(dr.bagT, 0, 1), e = k * k * (3 - 2 * k);
+      const s = lerp(SH * .3, F / cz * .34, e), x = lerp(SW * .8, hand[0], e), y = lerp(SH * .95, hand[1] + s * .64, e);
+      drawBag(x, y, s, tr.cu.col, e > .6 ? c.look.skin : null);
     }
   };
   for (let a = 0; a < 1; a += DT * 2) { yield 0; }
@@ -410,14 +433,14 @@ function* doorstep(tr) {
   for (const ch of tr.code) { phone.digits += ch; phone.key = ch; Snd.tap(); yield .6; }
   phone.codeOk = true; Snd.beep(); yield 1.1; phone.gt = 0;
   // handover
-  Snd.bag(); for (let k = 0; k < 1; k += DT * 1.1) { scene.door.bagT = k; scene.door.arm = Math.min(1, k * 2); yield 0; }
+  scene.carry = null; Snd.bag(); for (let k = 0; k < 1; k += DT * 1.1) { scene.door.bagT = k; scene.door.arm = Math.min(1, k * 2); yield 0; }
   scene.door.bagT = 1; phone.gt = .7; phone.mode = 'done'; phone.amount = tr.pay; phone.sub = 'Order #' + tr.order; Snd.cash(); yield 1.3;
   phone.gt = 0;
   const night = env.hour > 18.5 || env.hour < 5;
   yield* speak(c.first, G.p(['Cheers, thanks a lot!', 'Lovely, thank you.', 'Nice one, cheers.']), c.look.female ? 210 : 140);
   yield* speak('You', G.p(['No worries, enjoy!', night ? 'Have a good night.' : 'Have a good day.', 'Enjoy!']), 120);
+  for (let o = 1; o > 0; o -= DT * 1.5) { scene.door.open = o; scene.door.arm = 0; if (o < .75) scene.door.bagT = -1; yield 0; }
   scene.door.bagT = -1;
-  for (let o = 1; o > 0; o -= DT * 1.5) { scene.door.open = o; scene.door.arm = 0; yield 0; }
   scene.door.open = 0; Snd.door(); yield .6;
 }
 

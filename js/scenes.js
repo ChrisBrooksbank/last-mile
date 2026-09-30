@@ -229,15 +229,59 @@ function drawVignette() {
 }
 
 // bag carried in hand while walking
-function drawBag(x, y, s, col) {
-  ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(scene.wph) * .05);
-  ctx.strokeStyle = 'rgba(40,30,20,.9)'; ctx.lineWidth = s * .03; ctx.beginPath(); ctx.arc(-s * .1, -s * .48, s * .13, Math.PI, 0); ctx.arc(s * .1, -s * .48, s * .13, Math.PI, 0); ctx.stroke();
-  ctx.fillStyle = 'rgb(214,188,148)'; ctx.beginPath(); ctx.moveTo(-s * .3, -s * .42); ctx.lineTo(s * .3, -s * .42); ctx.lineTo(s * .34, s * .4); ctx.lineTo(-s * .34, s * .4); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = 'rgb(190,162,122)'; ctx.beginPath(); ctx.moveTo(s * .3, -s * .42); ctx.lineTo(s * .34, s * .4); ctx.lineTo(s * .12, s * .4); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = rgb(col || [200, 50, 40]); ctx.fillRect(-s * .3, -s * .1, s * .62, s * .16);
-  ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillRect(-s * .22, -s * .06, s * .3, s * .04); ctx.restore();
-  // hand
-  ctx.fillStyle = 'rgb(38,34,32)'; ctx.beginPath(); ctx.ellipse(x, y - s * .62, s * .18, s * .09, 0, 0, TAU); ctx.fill();
+// Kraft-paper takeaway bag held by its twisted handles (x, y = bag centre, s = bag height in px)
+function drawBag(x, y, s, col, skin) {
+  col = col || [200, 50, 40];
+  const k = LIGHT ? clamp(LIGHT.amb[0] * 1.1, .35, 1) : clamp(.3 + env.amb * .85, .3, 1), L = c => 'rgb(' + (c[0] * k | 0) + ',' + (c[1] * k | 0) + ',' + (c[2] * k | 0) + ')';
+  const sway = Math.sin(scene.wph - .6) * .07;   // pendulum: lags the stride
+  ctx.save(); ctx.translate(x, y - s * .62); ctx.rotate(sway); ctx.translate(0, s * .62);
+  const w = s * .66, top = -s * .4, bot = s * .42, gus = w * .2;
+  // soft shadow the bag casts on itself / the air behind
+  ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(s * .04, bot + s * .02, w * .55, s * .04, 0, 0, TAU); ctx.fill();
+  // handles (behind the front panel): twisted paper rope
+  for (const hx of [-w * .2, w * .2]) {
+    ctx.strokeStyle = L([150, 118, 80]); ctx.lineWidth = s * .035; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(hx - w * .1, top + s * .03); ctx.bezierCurveTo(hx - w * .12, top - s * .2, hx * .3, -s * .64, 0, -s * .63); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(hx + w * .1, top + s * .03); ctx.bezierCurveTo(hx + w * .12, top - s * .2, hx * .3, -s * .64, 0, -s * .63); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,240,210,' + (.25 * k).toFixed(2) + ')'; ctx.lineWidth = s * .01; ctx.beginPath(); ctx.moveTo(hx - w * .1, top); ctx.bezierCurveTo(hx - w * .12, top - s * .2, hx * .3, -s * .63, 0, -s * .62); ctx.stroke();
+  }
+  // side gusset (right), darker, with its centre fold
+  ctx.fillStyle = L([160, 128, 88]); ctx.beginPath(); ctx.moveTo(w / 2, top); ctx.lineTo(w / 2 + gus, top + s * .03); ctx.lineTo(w / 2 + gus, bot - s * .01); ctx.lineTo(w / 2, bot); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(70,50,30,.35)'; ctx.lineWidth = Math.max(1, s * .006); ctx.beginPath(); ctx.moveTo(w / 2 + gus * .5, top + s * .02); ctx.lineTo(w / 2 + gus * .45, bot - s * .08); ctx.lineTo(w / 2, bot); ctx.stroke();
+  // front panel: lit from the upper left, paper grain, crumple creases
+  const pg = ctx.createLinearGradient(-w / 2, top, w / 2, bot); pg.addColorStop(0, L([226, 198, 156])); pg.addColorStop(.55, L([206, 176, 132])); pg.addColorStop(1, L([176, 144, 102]));
+  ctx.fillStyle = pg; ctx.beginPath(); ctx.moveTo(-w / 2, top); ctx.lineTo(w / 2, top); ctx.lineTo(w / 2, bot); ctx.lineTo(-w / 2, bot); ctx.closePath(); ctx.fill();
+  ctx.save(); ctx.clip();
+  ctx.strokeStyle = 'rgba(90,64,36,.10)'; ctx.lineWidth = 1; for (let i = 0; i < 16; i++) { const gx = -w / 2 + w * hash(i, 3); ctx.beginPath(); ctx.moveTo(gx, top); ctx.lineTo(gx + w * .02, bot); ctx.stroke(); }
+  ctx.strokeStyle = 'rgba(80,56,30,.22)'; ctx.lineWidth = Math.max(1, s * .005); ctx.beginPath(); ctx.moveTo(-w * .3, top + s * .1); ctx.lineTo(-w * .12, top + s * .22); ctx.lineTo(w * .05, top + s * .16); ctx.moveTo(w * .1, bot - s * .2); ctx.lineTo(w * .32, bot - s * .12); ctx.stroke();
+  const gr = ctx.createRadialGradient(w * .18, bot - s * .18, 0, w * .18, bot - s * .18, s * .09); gr.addColorStop(0, 'rgba(120,80,30,.22)'); gr.addColorStop(1, 'rgba(120,80,30,0)'); ctx.fillStyle = gr; ctx.fillRect(-w / 2, top, w, bot - top);  // grease spot
+  ctx.fillStyle = 'rgba(0,0,0,.14)'; ctx.fillRect(-w / 2, bot - s * .06, w, s * .06);
+  ctx.restore();
+  // folded rim
+  ctx.fillStyle = L([196, 164, 120]); ctx.fillRect(-w / 2, top, w, s * .05); ctx.fillStyle = 'rgba(0,0,0,.16)'; ctx.fillRect(-w / 2, top + s * .05, w, s * .012);
+  // restaurant sticker
+  const cx = -w * .04, cy = -s * .02, cr = s * .13;
+  ctx.fillStyle = L(col); ctx.beginPath(); ctx.arc(cx, cy, cr, 0, TAU); ctx.fill();
+  ctx.strokeStyle = L([250, 246, 236]); ctx.lineWidth = s * .012; ctx.beginPath(); ctx.arc(cx, cy, cr * .78, 0, TAU); ctx.stroke();
+  ctx.fillStyle = L([250, 246, 236]); ctx.fillRect(cx - cr * .45, cy - cr * .12, cr * .9, cr * .1); ctx.fillRect(cx - cr * .32, cy + cr * .1, cr * .64, cr * .08);
+  // receipt stapled over the rim
+  ctx.save(); ctx.translate(w * .22, top - s * .02); ctx.rotate(.06);
+  ctx.fillStyle = L([246, 244, 238]); ctx.fillRect(0, 0, w * .2, s * .2); ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(w * .2, s * .01, s * .008, s * .2);
+  ctx.fillStyle = 'rgba(40,40,40,.55)'; for (let i = 0; i < 6; i++) ctx.fillRect(w * .025, s * (.05 + i * .024), w * (.1 + hash(i, 7) * .05), s * .007);
+  ctx.fillStyle = 'rgba(120,120,126,.9)'; ctx.fillRect(w * .06, s * .015, w * .08, s * .008);
+  ctx.restore();
+  ctx.restore();
+  const hx = x, hy = y - s * .64;
+  if (skin) { // someone else's bare hand holding it
+    ctx.fillStyle = L(skin); ctx.beginPath(); ctx.ellipse(hx, hy, s * .11, s * .075, -.1, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = Math.max(1, s * .005); for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(hx - s * .09 + i * s * .045, hy - s * .05); ctx.lineTo(hx - s * .095 + i * s * .045, hy + s * .05); ctx.stroke(); }
+    return;
+  }
+  // gloved hand gripping the handles
+  const hg = ctx.createLinearGradient(hx, hy - s * .08, hx, hy + s * .08); hg.addColorStop(0, L([70, 64, 60])); hg.addColorStop(1, L([22, 20, 20]));
+  ctx.fillStyle = hg; ctx.beginPath(); ctx.ellipse(hx, hy, s * .16, s * .085, -.08, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = Math.max(1, s * .006); for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(hx - s * .13 + i * s * .065, hy - s * .07); ctx.lineTo(hx - s * .14 + i * s * .065, hy + s * .06); ctx.stroke(); }
+  ctx.fillStyle = L([34, 30, 30]); ctx.beginPath(); ctx.ellipse(hx - s * .15, hy + s * .02, s * .05, s * .06, .4, 0, TAU); ctx.fill();
 }
 
 // ---------- tunnel scenes ----------
@@ -387,9 +431,16 @@ function drawDoorway(t, z, open, cust, arm, bagT) {
   const g = ctx.createLinearGradient(0, tl[1], 0, br[1]); g.addColorStop(0, '#f3d9a8'); g.addColorStop(1, '#b98b58'); ctx.fillStyle = g; ctx.fillRect(tl[0], tl[1], br[0] - tl[0], br[1] - tl[1]);
   ctx.fillStyle = 'rgba(60,40,30,.25)'; ctx.fillRect(tl[0] + (br[0] - tl[0]) * .75, tl[1], (br[0] - tl[0]) * .25, br[1] - tl[1]);
   ctx.fillStyle = 'rgba(70,50,40,.5)'; ctx.fillRect(tl[0] + (br[0] - tl[0]) * .05, tl[1] + (br[1] - tl[1]) * .2, (br[0] - tl[0]) * .16, (br[1] - tl[1]) * .35);
+  // hallway floor running back from the threshold, with a skirting line where it meets the back wall
+  { const fx0 = r.x0 - cam.x - .8, fx1 = r.x1 - cam.x + .8, zb = rz + 3.2, q = [P(fx0, r.y0, rz), P(fx1, r.y0, rz), P(fx1, r.y0, zb), P(fx0, r.y0, zb)];
+    const fg = ctx.createLinearGradient(0, q[2][1], 0, q[0][1]); fg.addColorStop(0, '#6e5238'); fg.addColorStop(1, '#8a6a48');
+    ctx.fillStyle = fg; ctx.beginPath(); ctx.moveTo(q[0][0], q[0][1]); for (let i = 1; i < 4; i++) ctx.lineTo(q[i][0], q[i][1]); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,26,16,.35)'; ctx.lineWidth = 1; for (let k = 1; k < 6; k++) { const a = P(fx0 + (fx1 - fx0) * k / 6, r.y0, rz), b = P(fx0 + (fx1 - fx0) * k / 6, r.y0, zb); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+    const s0 = P(fx0, r.y0 + .1, zb), s1 = P(fx1, r.y0, zb); ctx.fillStyle = 'rgba(240,232,214,.8)'; ctx.fillRect(s0[0], s0[1], s1[0] - s0[0], Math.max(1, s1[1] - s0[1])); }
   if (cust) {
     const s = F / (rz + .7), base = P(0 - cam.x, r.y0, rz + .7), h = 1.7 * s;
     const bx = base[0], by = base[1];
+    ctx.fillStyle = 'rgba(30,18,10,.35)'; ctx.beginPath(); ctx.ellipse(bx, by, h * .16, h * .035, 0, 0, TAU); ctx.fill();
     person(Object.assign({}, cust.look, { x: bx, y: by, h, view: 'front', raw: true, noShadow: true, reach: arm || 0, reachSide: 1, mood: (arm || 0) > .3 ? 'happy' : 'ok', noStubble: false }));
     if (cust.dog) { ctx.fillStyle = 'rgb(120,86,54)'; ctx.beginPath(); ctx.ellipse(bx - h * .22, by - h * .1, h * .12, h * .08, 0, 0, TAU); ctx.fill(); ctx.beginPath(); ctx.arc(bx - h * .3, by - h * .17, h * .05, 0, TAU); ctx.fill(); }
   }

@@ -19,10 +19,14 @@ function updateCamera(dt) {
     scene.pitch += ((R.braking ? .012 : 0) - scene.pitch) * (1 - Math.exp(-dt * 4));
     HZ = HZ0 + scene.pitch * SH;
   } else {
-    cam.z = scene.wz; cam.x = scene.wx + Math.sin(scene.wph) * .03; setHeading(scene.wdir > 0 ? 0 : Math.PI);
-    cam.h = scene.eyeH + Math.abs(Math.sin(scene.wph)) * .04;
+    // a step lands every PI of wph: the head drops sharply on each heel strike and rises through mid-stance,
+    // sways over the stance foot once per stride, and nods a touch on impact
+    const st = Math.abs(Math.sin(scene.wph)), strike = Math.pow(1 - st, 6);
+    cam.z = scene.wz; cam.x = scene.wx + Math.sin(scene.wph) * .028; setHeading(scene.wdir > 0 ? 0 : Math.PI);
+    cam.h = scene.eyeH + (Math.pow(st, .8) - .5) * .045;
+    HZ = HZ0 - strike * SH * .006;
     cam.yawPx = scene.look * SW * .3;
-    cam.roll = Math.sin(scene.wph) * .003;
+    cam.roll = Math.sin(scene.wph) * .004;
   }
 }
 
@@ -48,6 +52,8 @@ function ambient(dt) {
   }
 }
 
+// the carried bag rides up with each step, a beat behind the body, and drops back on the heel strike
+function carryBob() { return -Math.pow(Math.abs(Math.sin(scene.wph - .35)), .8) * SH * .012; }
 function render(dt) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, SW, SH);
@@ -60,11 +66,11 @@ function render(dt) {
     drawWeatherFx(dt, scene.rideActive);
     if (world.flashA > .02) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(' + (world.flashPh ? '20,50,150' : '10,20,70') + ',' + (world.flashA * .28).toFixed(3) + ')'; ctx.fillRect(0, 0, SW, SH); ctx.globalCompositeOperation = 'source-over'; }
     if (scene.rideActive) { drawHeadlight(dt); drawBike(dt); drawPhone(dt, true); drawMerch(dt); }
-    else { if (scene.carry) drawBag(SW * .82, SH * 1.02 + Math.abs(Math.sin(scene.wph)) * -6, SH * .32, scene.carry); if (phone.g > .03) drawPhone(dt, false); }
+    else { if (scene.carry) drawBag(SW * .82, SH * 1.02 + carryBob(), SH * .32, scene.carry); if (phone.g > .03) drawPhone(dt, false); }
   } else if (scene.mode === 'tunnel') {
     renderTunnel(dt);
     if (scene.tun && scene.tun.out) drawWeatherFx(dt, false);
-    if (scene.carry) drawBag(SW * .82, SH * 1.02 + Math.abs(Math.sin(scene.wph)) * -6, SH * .32, scene.carry);
+    if (scene.carry) drawBag(SW * .82, SH * 1.02 + carryBob(), SH * .32, scene.carry);
     if (phone.g > .03) drawPhone(dt, false);
   } else if (scene.mode === 'selfie') {
     renderSelfie(dt); drawWeatherFx(dt, false);
