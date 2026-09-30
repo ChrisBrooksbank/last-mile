@@ -133,6 +133,7 @@ const DISTRICTS = {
   hackney: { name: 'Hackney', kind: 'estate', pal: ['concrete', 'brick', 'modern'], floors: [4, 7], shop: .15, setback: [3, 7], lot: [16, 30], halfW: 4.4, pav: 2.8, traffic: .55, ped: .6, cruise: 9, signal: .3, tree: .3, parked: .6, curvy: 1.4, dest: ['estate', 'estate', 'flat', 'house'],
     streets: ['Mare Street', 'Broadway Market', 'Lauriston Road', 'Well Street', 'Homerton High Street', 'Graham Road', 'Amhurst Road', 'Dalston Lane'] },
 };
+for (const k in DISTRICTS) DISTRICTS[k].id = k;
 const NEIGH = {
   soho: ['shoreditch', 'islington', 'kensington', 'camden'], shoreditch: ['hackney', 'islington', 'soho', 'canary'],
   camden: ['islington', 'soho', 'kensington'], kensington: ['soho', 'camden', 'brixton'], islington: ['camden', 'shoreditch', 'soho', 'hackney'],

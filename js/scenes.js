@@ -324,8 +324,8 @@ let tunLast = 0;
 function renderTunnel(dt) {
   const t = scene.tun; if (!t) return;
   const z = scene.wz;
-  cam.dir = 1; cam.bend = 0; cam.x = scene.wx; cam.z = z; cam.h = t.H(z) + (t.eye || 1.62) + Math.sin(scene.wph * 2) * .025;
-  cam.yawPx = scene.look * SW * .3 + world.yaw * SW;
+  setHeading(0); setFrame(IDENT); cam.x = scene.wx; cam.z = z; setFrame(IDENT); cam.h = t.H(z) + (t.eye || 1.62) + Math.sin(scene.wph * 2) * .025;
+  cam.yawPx = scene.look * SW * .3;
   HZ = HZ0 - Math.sin(scene.wph) * 2 - (t.pitch || 0) * SH + (t.kind === 'indoor' ? -SH * .01 : 0);
   if (t.out) {
     drawSky(); ctx.fillStyle = shade([90, 100, 80], 60); ctx.fillRect(0, HZ, SW, SH - HZ);
@@ -345,8 +345,8 @@ function renderTunnel(dt) {
     if (it.emit !== undefined) f = emit(cc, rz, it.emit);
     else if (t.out) f = shade(cc, rz, k);
     else { const br = t.bright * k * (1 - .35 * (1 - Math.exp(-rz * .07))); f = 'rgb(' + (cc[0] * br | 0) + ',' + (cc[1] * br | 0) + ',' + (cc[2] * br | 0) + ')'; }
-    poly(f, it.q, cam.x, z);
-    if (it.lit) { ctx.globalAlpha = it.lit; poly(emit(it.warm, rz, .8), it.q, cam.x, z); ctx.globalAlpha = 1; }
+    poly(f, it.q);
+    if (it.lit) { ctx.globalAlpha = it.lit; poly(emit(it.warm, rz, .8), it.q); ctx.globalAlpha = 1; }
   }
   if (t.numPos && t.doorRect) {
     const rz = t.numPos.z - z; if (rz > .5 && rz < 8) {

@@ -1,38 +1,80 @@
 'use strict';
-// Pseudo-3D canvas renderer: perspective projection, streets, traffic, people.
+// Pseudo-3D canvas renderer. World-space polygons are transformed through a street frame and a rotating
+// camera (so turns really swing), clipped to the near plane and filled; facades are drawn as textured slices.
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 let SW = 1, SH = 1, F = 1, HZ = 1, HZ0 = 1, CXs = 1, DPR = 1;
-const NEAR = 0.7, FARZ = 150;
-const cam = { x: 0, z: 0, h: 1.25, dir: 1, yawPx: 0, bend: 0, roll: 0 };
+const NEAR = 0.6, FARZ = 150;
+const cam = { x: 0, z: 0, h: 1.25, th: 0, cs: 1, sn: 0, dir: 1, bend: 0, yawPx: 0, roll: 0 };
 const scene = {
   mode: 'street', rideActive: true, walking: false, fade: 0, carry: null, t: 0, tun: null, shop: null,
   pitch: 0, wz: 0, wx: 0, wdir: 1, wph: 0, look: 0, lookT: 0, indoor: false, door: null, extra: null,
 };
+function setHeading(th) { cam.th = th; cam.cs = Math.cos(th); cam.sn = Math.sin(th); if (Math.abs(cam.sn) < 1e-9) cam.sn = 0; if (Math.abs(cam.cs) < 1e-9) cam.cs = 0; }
 
 function resize() {
-  DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+  DPR = QP.has('dpr') ? +QP.get('dpr') : Math.min(window.devicePixelRatio || 1, 1.5);
   SW = window.innerWidth; SH = window.innerHeight;
   cv.width = Math.round(SW * DPR); cv.height = Math.round(SH * DPR);
   F = Math.max(SW * 0.68, SH * 0.95); HZ0 = HZ = SH * 0.44; CXs = SW / 2;
 }
 window.addEventListener('resize', resize);
 
-// ---------- projection helpers ----------
-function pathPoly(tgt, a, ox, oz) {
-  ox = ox || 0; oz = oz || 0;
-  for (let i = 0; i < a.length; i += 3) {
-    let z = a[i + 2] - oz; if (z < NEAR) z = NEAR;
-    const s = F / z, X = CXs + cam.yawPx + (a[i] - ox + cam.bend * z * z) * s, Y = HZ + (cam.h - a[i + 1]) * s;
-    if (i) tgt.lineTo(X, Y); else tgt.moveTo(X, Y);
-  }
-  tgt.closePath();
+// ---------- street frame + projection ----------
+const IDENT = { a: 1, b: 0, c: 0, d: 1, tx: 0, tz: 0 };
+let FR = IDENT; const camL = { x: 0, z: 0 };
+function setFrame(f) {
+  FR = f; const X = cam.x - f.tx, Z = cam.z - f.tz;
+  camL.x = f.a * X + f.c * Z; camL.z = f.b * X + f.d * Z;
 }
-function poly(fill, a, ox, oz) { ctx.fillStyle = fill; ctx.beginPath(); pathPoly(ctx, a, ox, oz); ctx.fill(); }
+let _rx = 0, _rz = 0;
+function toCam(x, z) {
+  const X = FR.a * x + FR.b * z + FR.tx, Z = FR.c * x + FR.d * z + FR.tz, dx = X - cam.x, dz = Z - cam.z;
+  _rx = dx * cam.cs - dz * cam.sn; _rz = dx * cam.sn + dz * cam.cs;
+}
+const bx_ = new Float64Array(40), by_ = new Float64Array(40), bz_ = new Float64Array(40), ox_ = new Float64Array(40), oy_ = new Float64Array(40), oz_ = new Float64Array(40);
+function clipProject(a) {
+  let n = Math.min(12, (a.length / 3) | 0);
+  const fa = FR.a, fb = FR.b, fc = FR.c, fd = FR.d, tx = FR.tx, tz = FR.tz, cs = cam.cs, sn = cam.sn, cx = cam.x, cz = cam.z;
+  let minz = 1e9;
+  for (let i = 0; i < n; i++) {
+    const x = a[3 * i], z = a[3 * i + 2], X = fa * x + fb * z + tx, Z = fc * x + fd * z + tz, dx = X - cx, dz = Z - cz;
+    bx_[i] = dx * cs - dz * sn; bz_[i] = dx * sn + dz * cs; by_[i] = a[3 * i + 1]; if (bz_[i] < minz) minz = bz_[i];
+  }
+  let m = n;
+  if (minz < NEAR) { // Sutherland-Hodgman against z = NEAR
+    m = 0;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, zi = bz_[i], zj = bz_[j], ii = zi >= NEAR, ij = zj >= NEAR;
+      if (ii) { ox_[m] = bx_[i]; oy_[m] = by_[i]; oz_[m] = zi; m++; }
+      if (ii !== ij) { const t = (NEAR - zi) / (zj - zi); ox_[m] = bx_[i] + (bx_[j] - bx_[i]) * t; oy_[m] = by_[i] + (by_[j] - by_[i]) * t; oz_[m] = NEAR; m++; }
+    }
+    if (m < 3) return 0;
+    for (let i = 0; i < m; i++) { bx_[i] = ox_[i]; by_[i] = oy_[i]; bz_[i] = oz_[i]; }
+  }
+  for (let i = 0; i < m; i++) {
+    const s = F / bz_[i];
+    ox_[i] = Math.max(-40000, Math.min(40000, CXs + cam.yawPx + bx_[i] * s));
+    oy_[i] = Math.max(-40000, Math.min(40000, HZ + (cam.h - by_[i]) * s));
+  }
+  return m;
+}
+function poly(fill, a) {
+  const m = clipProject(a); if (m < 3) return false;
+  ctx.fillStyle = fill; ctx.beginPath(); ctx.moveTo(ox_[0], oy_[0]);
+  for (let i = 1; i < m; i++) ctx.lineTo(ox_[i], oy_[i]);
+  ctx.closePath(); ctx.fill(); return true;
+}
+// camera-space point -> screen (used by tunnels, doorways, glows)
 function P(rx, y, rz) {
   if (rz < NEAR) rz = NEAR; const s = F / rz;
-  return [CXs + cam.yawPx + (rx + cam.bend * rz * rz) * s, HZ + (cam.h - y) * s];
+  return [CXs + cam.yawPx + rx * s, HZ + (cam.h - y) * s];
 }
-function emit(c, z, k) { // self-lit colour, only fogged
+// street-local point -> [sx, sy, depth] or null when behind the camera
+function Pw(x, y, z) {
+  toCam(x, z); if (_rz < NEAR) return null; const s = F / _rz;
+  return [CXs + cam.yawPx + _rx * s, HZ + (cam.h - y) * s, _rz];
+}
+function emit(c, z, k) {
   k = k === undefined ? 1 : k; const f = 1 - Math.exp(-z * env.fog), fc = env.fogC;
   return 'rgb(' + ((c[0] * k + (fc[0] - c[0] * k) * f) | 0) + ',' + ((c[1] * k + (fc[1] - c[1] * k) * f) | 0) + ',' + ((c[2] * k + (fc[2] - c[2] * k) * f) | 0) + ')';
 }
@@ -58,44 +100,18 @@ function groundGrad(c) {
   g.addColorStop(1, shade(c, 2));
   return g;
 }
-const ZS = []; for (let i = 0; i < 40; i++) ZS.push(NEAR * Math.pow(FARZ / NEAR, i / 39));
-function strip(x0, x1, y, fill, zA, zB) {
-  const d = cam.dir, a = (x0 - cam.x) * d, b = (x1 - cam.x) * d;
-  ctx.fillStyle = fill; ctx.beginPath();
-  for (let i = 0; i < ZS.length; i++) { const p = P(a, y, ZS[i]); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }
-  for (let i = ZS.length - 1; i >= 0; i--) { const p = P(b, y, ZS[i]); ctx.lineTo(p[0], p[1]); }
-  ctx.closePath(); ctx.fill();
-}
-function wrect(rx, zw0, zw1, y0, y1, fill) {
-  let a = (zw0 - cam.z) * cam.dir, b = (zw1 - cam.z) * cam.dir; if (a > b) { const t = a; a = b; b = t; }
-  if (b < NEAR || a > FARZ + 20) return; if (a < NEAR) a = NEAR;
-  poly(fill, [rx, y0, a, rx, y0, b, rx, y1, b, rx, y1, a]);
-}
-const twCache = {};
-function wallText(txt, rx, zw0, zw1, y0, y1, color, dm) {
-  let a = (zw0 - cam.z) * cam.dir, b = (zw1 - cam.z) * cam.dir; if (a > b) { const t = a; a = b; b = t; }
-  if (b < 1 || a > 70) return; a = Math.max(a, 0.9);
-  const zs = rx < 0 ? a : b, ze = rx < 0 ? b : a;
-  const A = P(rx, y1, zs), B = P(rx, y1, ze), C = P(rx, y0, zs);
-  if (Math.abs(B[0] - A[0]) < 12 || Math.abs(C[1] - A[1]) < 5) return;
-  const font = 'bold 100px Arial, sans-serif'; ctx.font = font;
-  let tw = twCache[txt]; if (!tw) tw = twCache[txt] = ctx.measureText(txt).width;
-  const Lw = tw + 60, Lh = 120;
-  ctx.save(); ctx.transform((B[0] - A[0]) / Lw, (B[1] - A[1]) / Lw, (C[0] - A[0]) / Lh, (C[1] - A[1]) / Lh, A[0], A[1]);
-  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = font;
-  ctx.fillText(txt, Lw / 2, Lh / 2 + 4); ctx.restore();
-}
+function strip(x0, x1, y, fill, z0, z1) { poly(fill, [x0, y, z0, x1, y, z0, x1, y, z1, x0, y, z1]); }
 
 function box(x0, x1, y0, y1, z0, z1, col, k) {
-  const d = cam.dir; k = k || 1;
-  let a = (x0 - cam.x) * d, b = (x1 - cam.x) * d; if (a > b) { const t = a; a = b; b = t; }
-  let c = (z0 - cam.z) * d, e = (z1 - cam.z) * d; if (c > e) { const t = c; c = e; e = t; }
-  if (e < NEAR || c > FARZ) return null;
-  const dm = Math.max(c, NEAR), info = { a, b, c, e, dm, fz: false, fx: 0 };
-  if (cam.h > y1) poly(shade(col, dm, 1.12 * k), [a, y1, c, b, y1, c, b, y1, e, a, y1, e]);
-  if (b < 0) { poly(shade(col, dm, .72 * k), [b, y0, c, b, y0, e, b, y1, e, b, y1, c]); info.fx = b; }
-  else if (a > 0) { poly(shade(col, dm, .72 * k), [a, y0, c, a, y0, e, a, y1, e, a, y1, c]); info.fx = a; }
-  if (c >= NEAR) { poly(shade(col, dm, .92 * k), [a, y0, c, b, y0, c, b, y1, c, a, y1, c]); info.fz = true; }
+  k = k || 1; toCam((x0 + x1) / 2, (z0 + z1) / 2);
+  const ext = Math.max(x1 - x0, z1 - z0);
+  if (_rz + ext < NEAR || _rz > FARZ + 10) return null;
+  const dm = Math.max(_rz, NEAR), info = { x0, x1, y0, y1, z0, z1, dm, fxs: 0, fzs: 0 };
+  if (cam.h > y1) poly(shade(col, dm, 1.12 * k), [x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1]);
+  if (camL.x > x1) { poly(shade(col, dm, .72 * k), [x1, y0, z0, x1, y0, z1, x1, y1, z1, x1, y1, z0]); info.fxs = 1; }
+  else if (camL.x < x0) { poly(shade(col, dm, .72 * k), [x0, y0, z0, x0, y0, z1, x0, y1, z1, x0, y1, z0]); info.fxs = -1; }
+  if (camL.z > z1) { poly(shade(col, dm, .92 * k), [x0, y0, z1, x1, y0, z1, x1, y1, z1, x0, y1, z1]); info.fzs = 1; }
+  else if (camL.z < z0) { poly(shade(col, dm, .92 * k), [x0, y0, z0, x1, y0, z0, x1, y1, z0, x0, y1, z0]); info.fzs = -1; }
   return info;
 }
 function fr(axis, plane, h0, h1, y0, y1, fill) {
@@ -111,7 +127,6 @@ function person(o) {
   ctx.save();
   if (!o.noShadow) { ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(x, y, h * .13, h * .028, 0, 0, TAU); ctx.fill(); }
   ctx.lineCap = 'round';
-  // legs
   ctx.strokeStyle = S(o.bot); ctx.lineWidth = h * .078;
   const hipY = y - h * .47;
   if (o.front) {
@@ -122,12 +137,10 @@ function person(o) {
   ctx.strokeStyle = S([24, 24, 28]); ctx.lineWidth = h * .06;
   ctx.beginPath(); ctx.moveTo(x + (o.front ? -h * .05 : sw) - h * .02, y - h * .015); ctx.lineTo(x + (o.front ? -h * .05 : sw) + h * .03, y - h * .015);
   ctx.moveTo(x + (o.front ? h * .05 : -sw) - h * .02, y - h * .015); ctx.lineTo(x + (o.front ? h * .05 : -sw) + h * .03, y - h * .015); ctx.stroke();
-  // torso
   const tw = o.front ? h * .27 : h * .19;
   ctx.fillStyle = S(o.top);
   ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - tw / 2, y - h * .84, tw, h * .4, h * .05) : ctx.rect(x - tw / 2, y - h * .84, tw, h * .4); ctx.fill();
   if (o.long) { ctx.fillStyle = S(o.top); ctx.fillRect(x - tw / 2, y - h * .5, tw, h * .3); }
-  // arms
   ctx.strokeStyle = S(o.sleeve || o.top); ctx.lineWidth = h * .06;
   if (o.arms) o.arms(x, y, h, tw); else {
     ctx.beginPath();
@@ -135,7 +148,6 @@ function person(o) {
     else { ctx.moveTo(x, y - h * .8); ctx.lineTo(x - sw * .8, y - h * .52); }
     ctx.stroke();
   }
-  // head
   const hr = h * .066;
   ctx.fillStyle = S(o.skin); ctx.fillRect(x - hr * .35, y - h * .87, hr * .7, hr * .6);
   ctx.beginPath(); ctx.arc(x, y - h * .925, hr, 0, TAU); ctx.fill();
@@ -157,152 +169,160 @@ function person(o) {
   }
   ctx.restore();
 }
-function drawPed(p, S, dm) {
-  const q = P(((p.x) - cam.x) * cam.dir, 0, dm); if (q[0] < -40 || q[0] > SW + 40) return;
-  const h = p.h * F / dm; if (h < 4) return;
+function drawPed(p) {
+  const q = Pw(p.x, 0, p.z); if (!q || q[0] < -60 || q[0] > SW + 60) return;
+  const dm = q[2], h = p.h * F / dm; if (h < 4) return;
   person({ x: q[0], y: q[1], h, dm, skin: p.skin, hair: p.hair, top: p.top, bot: p.bot, walk: true, ph: p.ph, umb: env.rain > .2 ? p.umb : null, front: false, noShadow: h < 14 });
   if (env.lamp > .3 && h > 8) glow(q[0], q[1] - h * .5, h * .5, [255, 200, 140], .05 * env.lamp);
 }
 
 // ---------- sky ----------
-let clouds = null;
+let clouds = null, skyDist = null, skyDistId = '';
+function angNorm(a) { while (a > Math.PI) a -= TAU; while (a < -Math.PI) a += TAU; return a; }
 function drawSky() {
-  if (!clouds) { const r = new RNG(7); clouds = []; for (let i = 0; i < 9; i++) clouds.push({ x: r.n() * 1.6, y: r.r(.04, .34), w: r.r(.15, .34), s: r.r(.4, 1) }); }
+  if (!clouds) { const r = new RNG(7); clouds = []; for (let i = 0; i < 12; i++) clouds.push({ phi: r.r(-Math.PI, Math.PI), y: r.r(.05, .36), w: r.r(.16, .36), s: r.r(.4, 1) }); }
   const g = ctx.createLinearGradient(0, 0, 0, HZ + 2);
   g.addColorStop(0, rgb(env.skyTop)); g.addColorStop(1, rgb(env.skyBot));
   ctx.fillStyle = g; ctx.fillRect(0, 0, SW, HZ + 2);
   if (env.night > .55 && env.cloud < .7) {
     ctx.fillStyle = 'rgba(255,255,255,' + (0.5 * (env.night - .55) * (1 - env.cloud)).toFixed(2) + ')';
-    for (let i = 0; i < 50; i++) ctx.fillRect(hash(i, 1) * SW, hash(i, 2) * HZ * .8, 1.3, 1.3);
+    for (let i = 0; i < 60; i++) { const ph = hash(i, 1) * TAU - Math.PI, dph = angNorm(ph - cam.th); if (Math.abs(dph) < 1.3) ctx.fillRect(CXs + cam.yawPx + F * Math.tan(dph), hash(i, 2) * HZ * .8, 1.3, 1.3); }
   }
-  if (env.twi > .05) { const gr = ctx.createRadialGradient(SW * .72, HZ, 0, SW * .72, HZ, SW * .6); gr.addColorStop(0, 'rgba(255,170,90,' + (env.twi * .55).toFixed(2) + ')'); gr.addColorStop(1, 'rgba(255,170,90,0)'); ctx.fillStyle = gr; ctx.fillRect(0, 0, SW, HZ + 2); }
+  const elev = Math.sin(Math.PI * (env.hour - 6.7) / 11.6);
+  if (elev > -0.05 && env.cloud < .9) {
+    const alt = Math.asin(clamp(elev, 0, 1)) * .85, dph = angNorm(0.55 - cam.th), sx = CXs + cam.yawPx + F * Math.tan(dph), sy = HZ - F * Math.tan(alt);
+    if (Math.abs(dph) < 1.4 && sy > -F * .4) {
+      const a = (1 - env.cloud) * (env.day * .8 + .2), warm = env.twi > .05 ? [255, 190, 120] : [255, 244, 214];
+      const rg = ctx.createRadialGradient(sx, sy, 0, sx, sy, F * .5); rg.addColorStop(0, rgba(warm, .55 * a)); rg.addColorStop(1, rgba(warm, 0)); ctx.fillStyle = rg; ctx.fillRect(0, 0, SW, HZ + 2);
+      ctx.fillStyle = rgba([255, 252, 240], a); ctx.beginPath(); ctx.arc(sx, sy, F * .022, 0, TAU); ctx.fill();
+    }
+  } else if (env.night > .7 && env.cloud < .6) {
+    const dph = angNorm(-.45 - cam.th), mx = CXs + cam.yawPx + F * Math.tan(dph), my = HZ - F * .55;
+    if (Math.abs(dph) < 1.3) { ctx.fillStyle = 'rgba(240,244,255,' + (0.85 * (1 - env.cloud)).toFixed(2) + ')'; ctx.beginPath(); ctx.arc(mx, my, F * .016, 0, TAU); ctx.fill(); }
+  }
+  if (env.twi > .05) { const gx = CXs + F * Math.tan(clamp(angNorm(.55 - cam.th), -1.4, 1.4)); const gr = ctx.createRadialGradient(gx, HZ, 0, gx, HZ, SW * .7); gr.addColorStop(0, 'rgba(255,170,90,' + (env.twi * .55).toFixed(2) + ')'); gr.addColorStop(1, 'rgba(255,170,90,0)'); ctx.fillStyle = gr; ctx.fillRect(0, 0, SW, HZ + 2); }
   const cl = mixc(mixc(env.skyBot, [255, 255, 255], .5 * env.day), [90, 96, 110], env.cloud * .45 * env.day);
   const sh = mulc(cl, .6 + .4 * env.day);
   for (const c of clouds) {
-    const x = ((c.x * SW + world.time * 3 * c.s + cam.yawPx * .5) % (SW * 1.6)) - SW * .3;
+    const dphi = angNorm(c.phi + world.time * .004 * c.s - cam.th); if (Math.abs(dphi) > 1.5) continue;
+    const x = CXs + cam.yawPx + F * Math.tan(dphi), w = c.w * F;
     ctx.fillStyle = rgba(sh, clamp(env.cloud * .5 * c.s + .04, 0, .6));
-    for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.ellipse(x + k * c.w * SW * .22, c.y * HZ + (k % 2) * 8, c.w * SW * .3, c.w * SW * .05, 0, 0, TAU); ctx.fill(); }
+    for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.ellipse(x + (k - 1.5) * w * .22, c.y * HZ + (k % 2) * 8, w * .3, w * .05, 0, 0, TAU); ctx.fill(); }
   }
 }
 function drawSkyline(S) {
-  if (!S.sky) {
-    const r = new RNG(S.seed ^ 55), tall = S.D.kind === 'towers' ? 2.4 : 1; S.sky = [];
-    for (let i = 0; i < 44; i++) S.sky.push({ x: -.3 + i * .04 + r.r(0, .02), w: r.r(.025, .06), h: r.r(.012, .06) * tall * SH * (r.c(.08) ? 2.2 : 1) });
+  if (skyDistId !== S.D.id) {
+    skyDistId = S.D.id; const r = new RNG(S.seed ^ 55), tall = S.D.kind === 'towers' ? 2.4 : 1; skyDist = [[], []];
+    for (let L = 0; L < 2; L++) for (let i = 0; i < 90; i++) skyDist[L].push({ phi: -Math.PI + (i + r.n()) * TAU / 90, w: r.r(.02, .05), h: r.r(.01, .05) * tall * (L ? .8 : 1.15) * (r.c(.07) ? 2.4 : 1) });
   }
-  const off = cam.yawPx + cam.bend * FARZ * F * .8;
-  ctx.fillStyle = shade([120, 124, 134], 220, .8);
-  for (const b of S.sky) ctx.fillRect(b.x * SW + off, HZ - b.h, b.w * SW, b.h + 2);
-  if (env.night > .4) { ctx.fillStyle = 'rgba(255,214,150,' + (env.night * .35).toFixed(2) + ')'; for (const b of S.sky) for (let k = 0; k < b.h / 9; k++) ctx.fillRect(b.x * SW + off + hash(k, b.x * 99) * b.w * SW, HZ - b.h + k * 8, 1.5, 1.5); }
+  for (let L = 0; L < 2; L++) {
+    const col = shade(L ? [128, 132, 142] : [110, 114, 124], L ? 300 : 200, .8);
+    for (const b of skyDist[L]) {
+      const dphi = angNorm(b.phi - cam.th); if (Math.abs(dphi) > 1.45) continue;
+      const x = CXs + cam.yawPx + F * Math.tan(dphi), w = Math.max(3, F * b.w), hh = b.h * SH * 2.2;
+      ctx.fillStyle = col; ctx.fillRect(x, HZ - hh, w, hh + 2);
+      if (env.night > .4 && !L) { ctx.fillStyle = 'rgba(255,214,150,' + (env.night * .35).toFixed(2) + ')'; for (let k = 0; k < hh / 9; k++) ctx.fillRect(x + hash(k, b.phi * 99) * w, HZ - hh + k * 8, 1.5, 1.5); }
+    }
+  }
+  const hz = ctx.createLinearGradient(0, HZ - F * .12, 0, HZ + 4); hz.addColorStop(0, rgba(env.fogC, 0)); hz.addColorStop(1, rgba(env.fogC, .55)); ctx.fillStyle = hz; ctx.fillRect(0, HZ - F * .12, SW, F * .12 + 4);
 }
 
-// ---------- the street ----------
+// ---------- textured facade walls ----------
 const DOORS = [[30, 50, 90], [120, 30, 30], [30, 30, 34], [40, 90, 60], [220, 220, 216], [130, 96, 50]];
-function drawLot(S, l) {
-  const d = cam.dir;
-  let za = (l.z0 - cam.z) * d, zb = (l.z1 - cam.z) * d; if (za > zb) { const t = za; za = zb; zb = t; }
-  if (zb < NEAR || za > FARZ + 10) return;
-  const rx = (l.x - cam.x) * d, sg = rx < 0 ? -1 : 1;
-  const zn = Math.max(za, NEAR), zf = Math.min(zb, FARZ + 25), dm = (zn + Math.min(zf, zn + 30)) / 2, h = l.h;
-  const px = ((l.side * (S.halfW + S.pav)) - cam.x) * d;
-  if (l.setback > .05) poly(shade(l.gcol, dm), [px, .01, zn, rx, .01, zn, rx, .01, zf, px, .01, zf]);
-  if (za >= NEAR) poly(shade(l.col, dm, .7), [rx, 0, za, rx + sg * 9, 0, za, rx + sg * 9, h, za, rx, h, za]);
-  poly(shade(l.col, dm), [rx, 0, zn, rx, 0, zf, rx, h, zf, rx, h, zn]);
-  const zc = (l.z1 - l.z0), doorC = l.z0 + l.doorU * zc;
-  const dz0 = doorC - (l.kind === 'shop' ? .55 : l.kind === 'block' || l.kind === 'glass' ? .9 : .5), dz1 = doorC + (l.kind === 'shop' ? .55 : l.kind === 'block' || l.kind === 'glass' ? .9 : .5);
-  const winLitK = env.winLit;
-  const near = dm < 55;
-  if (l.kind === 'shop') {
-    const add = mulc(l.shopCol, (l.dest ? .55 : .25) * env.lamp + .1 * (l.dest ? 1 : 0));
-    wrect(rx, l.z0 + .15, l.z1 - .15, 3.0, 3.75, shade(l.shopCol, dm, 1, add));
-    const glass = shade([88, 108, 122], dm);
-    wrect(rx, l.z0 + .3, dz0 - .1, .35, 2.75, glass); wrect(rx, dz1 + .1, l.z1 - .3, .35, 2.75, glass);
-    if (winLitK > .05 || l.dest) {
-      ctx.globalAlpha = l.dest ? Math.max(.35, winLitK) : winLitK * (hash(l.seed, 3) < .8 ? 1 : 0);
-      const lf = emit([255, 208, 140], dm, .8);
-      wrect(rx, l.z0 + .3, dz0 - .1, .35, 2.75, lf); wrect(rx, dz1 + .1, l.z1 - .3, .35, 2.75, lf); ctx.globalAlpha = 1;
-    }
-    wrect(rx, dz0, dz1, 0, 2.4, shade([28, 30, 34], dm));
-    if (l.dest || winLitK > .05) wrect(rx, dz0 + .1, dz1 - .1, .2, 2.2, emit([255, 214, 160], dm, l.dest ? .55 : .3 * winLitK));
-    if (near) wallText(l.name, rx, l.z0 + .4, l.z1 - .4, 3.08, 3.68, l.dest ? '#fff' : 'rgba(255,255,255,.88)', dm);
-  } else if (l.kind === 'house') {
-    const dc = DOORS[(hash(l.seed, 9) * DOORS.length) | 0], ground = shade([30, 34, 40], dm);
-    const lift = l.setback > 1 ? .55 : .2;
-    wrect(rx, l.z0 + .5, doorC - 1.1, .9, 2.5, ground); wrect(rx, doorC + 1.1, l.z1 - .5, .9, 2.5, ground);
-    if (winLitK > .05) { ctx.globalAlpha = winLitK * .8; const lf = emit([255, 200, 130], dm, .7); wrect(rx, l.z0 + .5, doorC - 1.1, .9, 2.5, lf); wrect(rx, doorC + 1.1, l.z1 - .5, .9, 2.5, lf); ctx.globalAlpha = 1; }
-    wrect(rx, dz0 - .12, dz1 + .12, lift - .1, 2.6, shade(l.trim, dm));
-    wrect(rx, dz0, dz1, lift, 2.45, shade(dc, dm));
-    wrect(rx, dz0 + .1, dz1 - .1, 2.0, 2.4, emit([255, 220, 170], dm, .25 + .5 * env.lamp * (hash(l.seed, 4) < .7 ? 1 : 0)));
-    if (l.setback > 1 || lift > .3) { wrect(rx, dz0 - .3, dz1 + .3, 0, lift, shade(l.trim, dm, .9)); }
-    if (l.dest && env.lamp > .1) wrect(rx, dz1 + .15, dz1 + .35, 1.8, 2.1, emit([255, 226, 170], dm, env.lamp));
-  } else if (l.kind === 'block') {
-    wrect(rx, l.z0, l.z1, 0, l.gh, shade(mulc(l.col, .8), dm));
-    wrect(rx, dz0, dz1, 0, 2.6, shade([40, 46, 54], dm));
-    wrect(rx, dz0 + .1, dz1 - .1, .1, 2.5, emit([230, 235, 220], dm, .25 + .45 * env.winLit + (l.dest ? .2 : 0)));
-    wrect(rx, l.z0 + .8, dz0 - .8, 1.2, 2.4, shade([34, 40, 48], dm)); wrect(rx, dz1 + .8, l.z1 - .8, 1.2, 2.4, shade([34, 40, 48], dm));
-  } else { // glass
-    wrect(rx, l.z0, l.z1, 0, l.gh, shade([70, 100, 128], dm));
-    wrect(rx, l.z0 + .5, l.z1 - .5, .2, l.gh - .4, emit([235, 240, 225], dm, .28 + .55 * env.winLit));
+function drawTexWall(S, l, tex, dmin) {
+  const x = l.x; toCam(x, l.z0); const ax = _rx, az = _rz; toCam(x, l.z1); const bx = _rx, bz = _rz;
+  const dz = bz - az, dx = bx - ax;
+  if (az < NEAR && bz < NEAR) return;
+  let tlo = 0, thi = 1;
+  if (az < NEAR) tlo = (NEAR - az) / dz; else if (bz < NEAR) thi = (NEAR - az) / dz;
+  const sxOf = t => CXs + cam.yawPx + F * (ax + t * dx) / (az + t * dz);
+  const xl = sxOf(tlo), xh = sxOf(thi), xmin = Math.min(xl, xh), xmax = Math.max(xl, xh);
+  if (xmax < 0 || xmin > SW || xmax - xmin < .5) return;
+  const x0 = Math.max(0, Math.floor(xmin)), x1 = Math.min(SW, Math.ceil(xmax));
+  const h = l.h, wpx = xmax - xmin, dens = tex.len * tex.ppm / wpx;
+  const lv = dens > 5 ? 2 : dens > 2.4 ? 1 : 0, mip = lv ? (tex.mips[lv] || makeMip(tex, lv)) : null;
+  const img = mip ? mip.A : tex.A, emi = mip ? mip.E : tex.E, iw = img.width, ih = img.height, ew = emi.width, eh = emi.height;
+  const flip = x > 0, step = wpx > 400 ? 3 : 2;
+  const tOf = sx => { const s = (sx - CXs - cam.yawPx) / F; let d = s * dz - dx; if (Math.abs(d) < 1e-9) d = 1e-9; const t = (ax - s * az) / d; return t < tlo ? tlo : t > thi ? thi : t; };
+  ctx.imageSmoothingEnabled = true;
+  const cols = [];
+  for (let sx = x0; sx < x1; sx += step) {
+    const t0 = tOf(sx), t1 = tOf(sx + step), tm = (t0 + t1) / 2, rz = az + tm * dz; if (rz < NEAR) continue;
+    const yT = HZ + (cam.h - h) * F / rz, yB = HZ + cam.h * F / rz;
+    let u0 = flip ? 1 - t0 : t0, u1 = flip ? 1 - t1 : t1; if (u0 > u1) { const q = u0; u0 = u1; u1 = q; }
+    const sw = Math.max(1, (u1 - u0) * iw);
+    ctx.drawImage(img, Math.min(u0 * iw, iw - sw), 0, sw, ih, sx, yT, step + .6, yB - yT);
+    cols.push(sx, yT, yB, u0, u1);
   }
-  drawWindows(l, rx, dm, near);
-  if (l.kind === 'block' && near) for (let f = 1; f < l.floors; f++) wrect(rx, l.z0, l.z1, l.gh + (f - 1) * l.fh - .12, l.gh + (f - 1) * l.fh + .12, shade(mulc(l.col, .7), dm));
-  if (l.cornice && l.kind !== 'glass') wrect(rx, l.z0, l.z1, h - .32, h, shade(l.trim, dm, .95));
+  if (!cols.length) return;
+  const nx = l.x < 0 ? 1 : -1, wall = [l.x, 0, l.z0, l.x, 0, l.z1, l.x, h, l.z1, l.x, h, l.z0];
+  const k = nx > 0 ? .9 : 1, ac = [clamp(env.amb * env.tint[0] * k, 0, 1), clamp(env.amb * env.tint[1] * k, 0, 1), clamp(env.amb * env.tint[2] * k, 0, 1)];
+  const lb = env.lamp * .24 * Math.max(0, 1 - dmin / 75); ac[0] = Math.min(1, ac[0] + lb); ac[1] = Math.min(1, ac[1] + lb * .78); ac[2] = Math.min(1, ac[2] + lb * .5);
+  if (ac[0] < .985 || ac[1] < .985 || ac[2] < .985) { ctx.globalCompositeOperation = 'multiply'; poly('rgb(' + (ac[0] * 255 | 0) + ',' + (ac[1] * 255 | 0) + ',' + (ac[2] * 255 | 0) + ')', wall); ctx.globalCompositeOperation = 'source-over'; }
+  if (env.winLit > .04 && dmin < 110) {
+    ctx.globalAlpha = Math.min(1, env.winLit * 1.05);
+    for (let i = 0; i < cols.length; i += 5) {
+      const sw = Math.max(1, (cols[i + 4] - cols[i + 3]) * ew);
+      ctx.drawImage(emi, Math.min(cols[i + 3] * ew, ew - sw), 0, sw, eh, cols[i], cols[i + 1], step + .6, cols[i + 2] - cols[i + 1]);
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (Math.abs(xh - xl) > 1) {
+    const g = ctx.createLinearGradient(xl, 0, xh, 0);
+    for (let i = 0; i <= 3; i++) { const t = tlo + (thi - tlo) * i / 3, rz = az + t * dz; g.addColorStop(i / 3, rgba(env.fogC, fogAmt(Math.max(rz, 1)))); }
+    poly(g, wall);
+  }
+}
+
+function drawLot(S, l, dmin) {
+  const d = l.depth, sg = l.x < 0 ? -1 : 1, h = l.h;
+  const px = l.side * (S.halfW + S.pav), doorC = l.z0 + l.doorU * (l.z1 - l.z0);
+  if (l.setback > .05) poly(shade(l.gcol, d), [px, .01, l.z0, l.x, .01, l.z0, l.x, .01, l.z1, px, .01, l.z1]);
+  const endZ = camL.z < l.z0 ? l.z0 : camL.z > l.z1 ? l.z1 : null;
+  if (endZ !== null) poly(shade(l.col, d, .66), [l.x, 0, endZ, l.x + sg * 9, 0, endZ, l.x + sg * 9, h, endZ, l.x, h, endZ]);
+  if ((camL.x - l.x) * (l.x < 0 ? 1 : -1) > 0) {
+    const tex = getLotTex(S, l);
+    if (tex) drawTexWall(S, l, tex, dmin);
+    else poly(shade(l.col, d), [l.x, 0, l.z0, l.x, 0, l.z1, l.x, h, l.z1, l.x, h, l.z0]);
+  }
+  if (l.chim && l.kind !== 'glass' && d < 90) {
+    const cz = l.z0 + (l.z1 - l.z0) * .3, cx = l.x + sg * 2.2;
+    box(cx - .4, cx + .4, h - .2, h + 1.5, cz - .4, cz + .4, mulc(l.col, .85));
+    box(cx - .3, cx + .3, h + 1.5, h + 1.9, cz - .3, cz + .3, [150, 90, 70]);
+  }
   if (l.front && l.setback > 1) {
     const gh = l.front === 'hedge' ? 1.15 : l.front === 'brick' ? .85 : .95, fc = l.front === 'hedge' ? [46, 88, 42] : l.front === 'brick' ? [130, 80, 66] : [24, 24, 28];
-    const gate0 = doorC - .55, gate1 = doorC + .55, fill = shade(fc, dm);
-    wrect(px, l.z0, gate0, 0, gh, fill); wrect(px, gate1, l.z1, 0, gh, fill);
-    if (l.front !== 'rail') { let a = (l.z0 - cam.z) * d, b = (gate0 - cam.z) * d; if (a > b) { const t = a; a = b; b = t; } if (b > NEAR && a < FARZ) poly(shade(fc, dm, 1.15), [px, gh, Math.max(a, NEAR), px + sg * .5, gh, Math.max(a, NEAR), px + sg * .5, gh, b, px, gh, b]); }
-    // path to the door
-    poly(shade([150, 145, 138], dm), [(doorC - .5 - cam.z) * d < (doorC + .5 - cam.z) * d ? px : px, .02, Math.max(Math.min((doorC - .5 - cam.z) * d, (doorC + .5 - cam.z) * d), NEAR), rx, .02, Math.max(Math.min((doorC - .5 - cam.z) * d, (doorC + .5 - cam.z) * d), NEAR), rx, .02, Math.max((doorC + .5 - cam.z) * d, (doorC - .5 - cam.z) * d, NEAR), px, .02, Math.max((doorC + .5 - cam.z) * d, (doorC - .5 - cam.z) * d, NEAR)]);
+    const g0 = doorC - .55, g1 = doorC + .55, fill = shade(fc, d, l.front === 'rail' ? 1 : .95);
+    poly(fill, [px, 0, l.z0, px, 0, g0, px, gh, g0, px, gh, l.z0]); poly(fill, [px, 0, g1, px, 0, l.z1, px, gh, l.z1, px, gh, g1]);
+    if (l.front !== 'rail') { poly(shade(fc, d, 1.2), [px, gh, l.z0, px + sg * .5, gh, l.z0, px + sg * .5, gh, g0, px, gh, g0]); poly(shade(fc, d, 1.2), [px, gh, g1, px + sg * .5, gh, g1, px + sg * .5, gh, l.z1, px, gh, l.z1]); }
+    poly(shade([150, 145, 138], d), [px, .02, doorC - .5, l.x, .02, doorC - .5, l.x, .02, doorC + .5, px, .02, doorC + .5]);
   }
-}
-function drawWindows(l, rx, dm, near) {
-  const len = l.z1 - l.z0, n = Math.max(1, Math.floor(len / l.wp)), pitch = len / n, ww = pitch * l.ww;
-  const dark = new Path2D(), warm = new Path2D(), cool = new Path2D();
-  const lk = l.lit * (env.winLit * .92 + .06);
-  let any = false;
-  for (let f = 1; f < l.floors; f++) {
-    const yb = l.gh + (f - 1) * l.fh; let y0, y1;
-    if (l.kind === 'glass') { y0 = yb + .2; y1 = yb + l.fh - .25; } else { y0 = yb + .7; y1 = yb + 2.3; }
-    if (l.kind === 'house' && f === 1 && l.setback < .1) { y0 = yb + .5; }
-    for (let k = 0; k < n; k++) {
-      const zc = l.z0 + (k + .5) * pitch;
-      let a = (zc - ww / 2 - cam.z) * cam.dir, b = (zc + ww / 2 - cam.z) * cam.dir; if (a > b) { const t = a; a = b; b = t; }
-      if (b < NEAR || a > FARZ) continue; if (a < NEAR) a = NEAR;
-      const hh = hash(l.seed, k, f);
-      pathPoly(hh < lk ? (hh < lk * .3 ? cool : warm) : dark, [rx, y0, a, rx, y0, b, rx, y1, b, rx, y1, a]); any = true;
-    }
-  }
-  if (!any) return;
-  const dk = mixc(l.kind === 'glass' ? [44, 68, 96] : [36, 42, 54], env.skyBot, .32 * env.day);
-  ctx.fillStyle = shade(dk, dm, l.kind === 'glass' ? 1.1 : 1); ctx.fill(dark);
-  ctx.fillStyle = emit([255, 204, 130], dm, .5 + .4 * env.night); ctx.fill(warm);
-  ctx.fillStyle = emit([190, 214, 255], dm, .5); ctx.fill(cool);
-  if (near && l.kind !== 'glass') { ctx.strokeStyle = shade([236, 236, 230], dm, .9); ctx.lineWidth = Math.max(1, 0.05 * F / dm); ctx.stroke(dark); }
 }
 
+// ---------- vehicles ----------
 function drawVeh(v) {
   if (v.type === 'bike') return drawCyclist(v);
-  const d = cam.dir; let x0, x1, z0, z1;
+  let x0, x1, z0, z1;
   if (v.axis === 'z') { x0 = v.x - v.w / 2; x1 = v.x + v.w / 2; z0 = v.z - v.len / 2; z1 = v.z + v.len / 2; }
   else { x0 = v.x - v.len / 2; x1 = v.x + v.len / 2; z0 = v.z - v.w / 2; z1 = v.z + v.w / 2; }
   const T = v.type, lowTop = T === 'car' ? .88 : T === 'cab' ? 1.0 : v.h, y0 = T === 'bus' ? .45 : .28;
-  // shadow
-  { const a = (x0 - .1 - cam.x) * d, b = (x1 + .1 - cam.x) * d, c = (z0 - .1 - cam.z) * d, e = (z1 + .1 - cam.z) * d;
-    if (Math.max(c, e) > NEAR && Math.min(c, e) < FARZ) poly('rgba(0,0,0,.28)', [Math.min(a, b), .01, Math.min(c, e), Math.max(a, b), .01, Math.min(c, e), Math.max(a, b), .01, Math.max(c, e), Math.min(a, b), .01, Math.max(c, e)]); }
+  poly('rgba(0,0,0,.28)', [x0 - .1, .01, z0 - .1, x1 + .1, .01, z0 - .1, x1 + .1, .01, z1 + .1, x0 - .1, .01, z1 + .1]);
   const body = box(x0, x1, y0, lowTop, z0, z1, v.col);
   if (!body) return;
-  let cabi = null;
   if (T === 'car' || T === 'cab') {
     const glass = mixc(v.col, [22, 30, 42], .78);
-    if (v.axis === 'z') cabi = box(x0 + .1, x1 - .1, lowTop, v.h, z0 + .85, z1 - .75, glass);
-    else cabi = box(x0 + .85, x1 - .75, lowTop, v.h, z0 + .1, z1 - .1, glass);
+    if (v.axis === 'z') box(x0 + .1, x1 - .1, lowTop, v.h, z0 + .85, z1 - .75, glass);
+    else box(x0 + .85, x1 - .75, lowTop, v.h, z0 + .1, z1 - .1, glass);
   }
-  const dm = body.dm, rh = v.dir * d;
-  const az = v.axis === 'z';
-  const end = az ? (body.fz ? { axis: 'z', plane: body.c, h0: body.a, h1: body.b, front: rh === -1 } : null)
-    : (body.fx !== 0 ? { axis: 'x', plane: body.fx, h0: body.c, h1: body.e, front: body.fx === body.b ? rh === 1 : rh === -1 } : null);
-  const side = az ? (body.fx !== 0 ? { axis: 'x', plane: body.fx, h0: body.c, h1: body.e } : null)
-    : (body.fz ? { axis: 'z', plane: body.c, h0: body.a, h1: body.b } : null);
+  const dm = body.dm, az = v.axis === 'z';
+  let end = null, side = null;
+  if (az) {
+    if (body.fzs) end = { axis: 'z', plane: body.fzs < 0 ? z0 : z1, h0: x0, h1: x1, front: body.fzs < 0 ? v.dir === -1 : v.dir === 1 };
+    if (body.fxs) side = { axis: 'x', plane: body.fxs < 0 ? x0 : x1, h0: z0, h1: z1 };
+  } else {
+    if (body.fxs) end = { axis: 'x', plane: body.fxs < 0 ? x0 : x1, h0: z0, h1: z1, front: body.fxs < 0 ? v.dir === -1 : v.dir === 1 };
+    if (body.fzs) side = { axis: 'z', plane: body.fzs < 0 ? z0 : z1, h0: x0, h1: x1 };
+  }
   const dark = shade([12, 12, 14], dm);
   if (side) {
     const L = side.h1 - side.h0;
@@ -313,56 +333,55 @@ function drawVeh(v) {
     for (const f of [.17, .83]) fr(side.axis, side.plane, side.h0 + L * f - .34, side.h0 + L * f + .34, 0, .64, dark);
   }
   if (end) {
-    const W = end.h1 - end.h0, cx = (end.h0 + end.h1) / 2;
+    const Wd = end.h1 - end.h0, cx = (end.h0 + end.h1) / 2;
     if (end.front) {
       const hl = emit([255, 250, 225], dm, .9);
-      fr(end.axis, end.plane, end.h0 + W * .07, end.h0 + W * .27, .6, .76, hl); fr(end.axis, end.plane, end.h1 - W * .27, end.h1 - W * .07, .6, .76, hl);
-      fr(end.axis, end.plane, cx - W * .18, cx + W * .18, .45, .6, dark);
-      if (T === 'van' || T === 'bus') fr(end.axis, end.plane, end.h0 + W * .06, end.h1 - W * .06, T === 'bus' ? 1.9 : 1.3, T === 'bus' ? 3.6 : 2.1, shade([40, 54, 70], dm));
+      fr(end.axis, end.plane, end.h0 + Wd * .07, end.h0 + Wd * .27, .6, .76, hl); fr(end.axis, end.plane, end.h1 - Wd * .27, end.h1 - Wd * .07, .6, .76, hl);
+      fr(end.axis, end.plane, cx - Wd * .18, cx + Wd * .18, .45, .6, dark);
+      if (T === 'van' || T === 'bus') fr(end.axis, end.plane, end.h0 + Wd * .06, end.h1 - Wd * .06, T === 'bus' ? 1.9 : 1.3, T === 'bus' ? 3.6 : 2.1, shade([40, 54, 70], dm));
       if (env.lamp > .2 || env.rain > .3) {
-        for (const xx of [end.h0 + W * .17, end.h1 - W * .17]) { const p = end.axis === 'z' ? P(xx, .68, end.plane) : P(end.plane, .68, xx); glow(p[0], p[1], Math.max(4, F / dm * .55), [255, 244, 210], .55 * Math.max(env.lamp, .4)); }
+        for (const xx of [end.h0 + Wd * .17, end.h1 - Wd * .17]) { const p = end.axis === 'z' ? Pw(xx, .68, end.plane) : Pw(end.plane, .68, xx); if (p) glow(p[0], p[1], Math.max(4, F / dm * .55), [255, 244, 210], .55 * Math.max(env.lamp, .4)); }
       }
     } else {
       const br = v.brake ? 1 : .55, tl = emit([255, 40, 34], dm, br);
-      fr(end.axis, end.plane, end.h0 + W * .05, end.h0 + W * .26, .6, .8, tl); fr(end.axis, end.plane, end.h1 - W * .26, end.h1 - W * .05, .6, .8, tl);
-      fr(end.axis, end.plane, cx - W * .15, cx + W * .15, .4, .52, emit([225, 215, 120], dm, .6));
-      if (T === 'bus') fr(end.axis, end.plane, end.h0 + W * .08, end.h1 - W * .08, 2.4, 3.6, env.winLit > .3 ? emit([255, 222, 160], dm, .5) : shade([40, 54, 70], dm));
-      if (T === 'van') fr(end.axis, end.plane, end.h0 + W * .1, end.h1 - W * .1, 1.5, 2.1, shade([44, 56, 70], dm));
-      const pp = end.axis === 'z' ? P(end.h0 + W * .15, .7, end.plane) : P(end.plane, .7, end.h0 + W * .15), pq = end.axis === 'z' ? P(end.h1 - W * .15, .7, end.plane) : P(end.plane, .7, end.h1 - W * .15);
+      fr(end.axis, end.plane, end.h0 + Wd * .05, end.h0 + Wd * .26, .6, .8, tl); fr(end.axis, end.plane, end.h1 - Wd * .26, end.h1 - Wd * .05, .6, .8, tl);
+      fr(end.axis, end.plane, cx - Wd * .15, cx + Wd * .15, .4, .52, emit([225, 215, 120], dm, .6));
+      if (T === 'bus') fr(end.axis, end.plane, end.h0 + Wd * .08, end.h1 - Wd * .08, 2.4, 3.6, env.winLit > .3 ? emit([255, 222, 160], dm, .5) : shade([40, 54, 70], dm));
+      if (T === 'van') fr(end.axis, end.plane, end.h0 + Wd * .1, end.h1 - Wd * .1, 1.5, 2.1, shade([44, 56, 70], dm));
+      const pa = end.axis === 'z' ? Pw(end.h0 + Wd * .15, .7, end.plane) : Pw(end.plane, .7, end.h0 + Wd * .15), pb = end.axis === 'z' ? Pw(end.h1 - Wd * .15, .7, end.plane) : Pw(end.plane, .7, end.h1 - Wd * .15);
       const ga = (v.brake ? .55 : .2) * (0.4 + env.night + env.rain), rr = Math.max(4, F / dm * .55);
-      glow(pp[0], pp[1], rr, [255, 30, 24], ga); glow(pq[0], pq[1], rr, [255, 30, 24], ga);
-      if (env.wet > .4) for (const q of [pp, pq]) { if (rr > 14) continue; const g = ctx.createLinearGradient(0, q[1], 0, q[1] + rr * 5); g.addColorStop(0, 'rgba(255,40,30,' + (.28 * env.wet).toFixed(2) + ')'); g.addColorStop(1, 'rgba(255,40,30,0)'); ctx.fillStyle = g; ctx.fillRect(q[0] - rr * .25, q[1], rr * .5, rr * 5); }
+      for (const q of [pa, pb]) if (q) {
+        glow(q[0], q[1], rr, [255, 30, 24], ga);
+        if (env.wet > .4 && rr <= 14) { const g = ctx.createLinearGradient(0, q[1], 0, q[1] + rr * 5); g.addColorStop(0, 'rgba(255,40,30,' + (.28 * env.wet).toFixed(2) + ')'); g.addColorStop(1, 'rgba(255,40,30,0)'); ctx.fillStyle = g; ctx.fillRect(q[0] - rr * .25, q[1], rr * .5, rr * 5); }
+      }
     }
   }
-  if (T === 'cab') { const p = P(v.x - cam.x, v.h + .12, Math.max(body.c + (body.e - body.c) * .5, NEAR)); const r = F / dm * .3; ctx.fillStyle = emit([255, 210, 90], dm, .9); ctx.fillRect(p[0] - r, p[1] - r * .3, r * 2, r * .5); }
+  if (T === 'cab') { const p = Pw(v.x, v.h + .12, v.z); if (p) { const r = F / dm * .3; ctx.fillStyle = emit([255, 210, 90], dm, .9); ctx.fillRect(p[0] - r, p[1] - r * .3, r * 2, r * .5); } }
 }
 function drawCyclist(v) {
-  const d = cam.dir, rz = (v.z - cam.z) * d; if (rz < NEAR || rz > FARZ) return;
-  const q = P((v.x - cam.x) * d, 0, rz), s = F / rz;
+  const q = Pw(v.x, 0, v.z); if (!q) return; const rz = q[2], s = F / rz;
   ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(q[0], q[1], .3 * s, .05 * s, 0, 0, TAU); ctx.fill();
   ctx.fillStyle = shade([14, 14, 16], rz); ctx.fillRect(q[0] - .035 * s, q[1] - .68 * s, .07 * s, .68 * s);
   person({ x: q[0], y: q[1] + .02 * s, h: 1.75 * s * .94, dm: rz, skin: SKIN[1], top: [210, 200, 70], bot: [30, 30, 40], helmet: [40, 60, 130], front: false, walk: false, noShadow: true, arms: (x, y, h) => { ctx.beginPath(); ctx.moveTo(x, y - h * .8); ctx.lineTo(x, y - h * .57); ctx.stroke(); } });
-  if (d === v.dir) glow(q[0], q[1] - .75 * s, .3 * s, [255, 30, 24], .6 * Math.max(.4, env.lamp));
+  glow(q[0], q[1] - .75 * s, .3 * s, [255, 30, 24], .6 * Math.max(.4, env.lamp));
 }
 
 function drawFurn(S, f) {
-  const d = cam.dir, rz = (f.z - cam.z) * d; if (rz < NEAR || rz > FARZ) return;
   switch (f.k) {
     case 'lamp': {
       box(f.x - .06, f.x + .06, 0, 5.4, f.z - .06, f.z + .06, [46, 50, 54]);
       const x2 = f.x - f.side * 1.2; box(Math.min(f.x, x2), Math.max(f.x, x2), 5.32, 5.44, f.z - .05, f.z + .05, [46, 50, 54]);
-      const p = P((x2 - cam.x) * d, 5.3, rz);
-      const on = env.lamp; ctx.fillStyle = on > .1 ? emit([255, 226, 170], rz, 1) : shade([90, 94, 98], rz);
+      const p = Pw(x2, 5.3, f.z); if (!p) break; const rz = p[2], on = env.lamp;
+      ctx.fillStyle = on > .1 ? emit([255, 226, 170], rz, 1) : shade([90, 94, 98], rz);
       ctx.fillRect(p[0] - .16 * F / rz, p[1] - .03 * F / rz, .32 * F / rz, .07 * F / rz);
       glow(p[0], p[1], Math.max(6, F / rz * 1.7), [255, 210, 140], on * .75);
-      if (env.wet > .4 && on > .2) { const g = ctx.createLinearGradient(0, p[1], 0, SH); const gy = P(0, 0, rz); g.addColorStop(0, 'rgba(255,214,150,0)'); break; }
       break;
     }
     case 'tree': {
       box(f.x - .12, f.x + .12, 0, 2.6, f.z - .12, f.z + .12, [70, 54, 40]);
-      const p = P((f.x - cam.x) * d, 4.4 * f.sz, rz), r = F / rz * 2.2 * f.sz;
+      const p = Pw(f.x, 4.4 * f.sz, f.z); if (!p) break; const rz = p[2], r = F / rz * 2.2 * f.sz;
       const leaf = f.hue < .5 ? [72, 112, 50] : f.hue < .8 ? [138, 142, 48] : [190, 122, 42];
-      for (let i = 0; i < 4; i++) { ctx.fillStyle = shade(leaf, rz, .78 + i * .08); ctx.beginPath(); ctx.ellipse(p[0] + (i - 1.5) * r * .3, p[1] + (i % 2 ? 1 : -1) * r * .18, r * .62, r * .5, 0, 0, TAU); ctx.fill(); }
+      for (let i = 0; i < 6; i++) { ctx.fillStyle = shade(leaf, rz, .7 + (i % 3) * .12); ctx.beginPath(); ctx.ellipse(p[0] + (i - 2.5) * r * .22, p[1] + (i % 2 ? 1 : -1) * r * .2 + (i % 3) * r * .05, r * .5, r * .42, 0, 0, TAU); ctx.fill(); }
       break;
     }
     case 'bin': box(f.x - .28, f.x + .28, 0, 1.0, f.z - .28, f.z + .28, [46, 64, 50]); break;
@@ -370,115 +389,118 @@ function drawFurn(S, f) {
     case 'bollard': box(f.x - .07, f.x + .07, 0, .9, f.z - .07, f.z + .07, [60, 60, 66]); break;
     case 'phone': {
       const b = box(f.x - .5, f.x + .5, 0, 2.4, f.z - .5, f.z + .5, [196, 30, 34]);
-      if (b && b.fz) fr('z', b.c, b.a + .12, b.b - .12, .5, 2.05, emit([255, 226, 170], b.dm, .25 + .5 * env.night));
+      if (b && b.fzs) fr('z', b.fzs < 0 ? f.z - .5 : f.z + .5, f.x - .38, f.x + .38, .5, 2.05, emit([255, 226, 170], b.dm, .25 + .5 * env.night));
       break;
     }
     case 'bus': {
       box(f.x - .03, f.x + .03, 0, 2.6, f.z - .03, f.z + .03, [70, 70, 76]);
-      box(f.x + f.side * .1 - .8 * f.side, f.x + f.side * .1 + 0, 2.3, 2.42, f.z - 1.8, f.z + 1.8, [60, 64, 70]);
-      const b = box(f.x + f.side * .75 - .03, f.x + f.side * .75 + .03, .2, 2.3, f.z - 1.7, f.z + 1.7, mixc([120, 150, 170], [40, 50, 60], .5));
-      if (b && b.fx) fr('x', b.fx, b.c + .3, b.e - .3, .5, 2.0, emit([200, 230, 255], b.dm, .3 + .5 * env.night));
+      box(Math.min(f.x, f.x + f.side * .9) - .01, Math.max(f.x, f.x + f.side * .9) + .01, 2.3, 2.42, f.z - 1.8, f.z + 1.8, [60, 64, 70]);
+      const bx = f.x + f.side * .85, b = box(bx - .03, bx + .03, .2, 2.3, f.z - 1.7, f.z + 1.7, mixc([120, 150, 170], [40, 50, 60], .5));
+      if (b && b.fxs) fr('x', bx + b.fxs * .03, f.z - 1.4, f.z + 1.4, .5, 2.0, emit([200, 230, 255], b.dm, .3 + .5 * env.night));
       box(f.x - f.side * .35 - .02, f.x - f.side * .35 + .02, 2.2, 3.2, f.z - .5, f.z + .5, [200, 30, 34]);
       break;
     }
   }
 }
-
 function drawSignal(S) {
-  const rz = (S.stopZ + .5 - cam.z) * cam.dir; if (rz < NEAR || rz > FARZ) return;
-  const x = -S.halfW - .4, st = sigState(S);
-  box(x - .05, x + .05, 0, 3.0, S.stopZ + .5 - .05, S.stopZ + .5 + .05, [50, 52, 56]);
-  const b = box(x - .17, x + .17, 2.3, 3.2, S.stopZ + .5 - .12, S.stopZ + .5 + .12, [18, 18, 20]);
-  if (!b) return;
+  const x = -S.halfW - .4, zz = S.stopZ + .5, st = sigState(S);
+  box(x - .05, x + .05, 0, 3.0, zz - .05, zz + .05, [50, 52, 56]);
+  const b = box(x - .17, x + .17, 2.3, 3.2, zz - .12, zz + .12, [18, 18, 20]); if (!b) return;
   const cols = [[255, 40, 30], [255, 180, 30], [40, 255, 120]], act = st === 'red' ? 0 : st === 'amber' ? 1 : 2;
   for (let i = 0; i < 3; i++) {
-    const p = P((x - cam.x) * cam.dir, 3.0 - i * .3, rz - .13), r = Math.max(1.5, F / rz * .1);
+    const p = Pw(x, 3.0 - i * .3, zz - .13); if (!p) continue; const r = Math.max(1.5, F / p[2] * .1);
     ctx.fillStyle = i === act ? rgb(cols[i]) : 'rgb(30,30,32)'; ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, TAU); ctx.fill();
-    if (i === act) glow(p[0], p[1], Math.max(5, F / rz * .8), cols[i], .8);
+    if (i === act) glow(p[0], p[1], Math.max(5, F / p[2] * .8), cols[i], .8);
   }
 }
-
-function drawScooter(x, z, dir) {
-  const c = [34, 40, 46];
-  box(x - .22, x + .22, .34, .72, z - .85, z + .55, c);
+function drawScooter(x, z) {
+  box(x - .22, x + .22, .34, .72, z - .85, z + .55, [34, 40, 46]);
   box(x - .2, x + .2, .72, .78, z - .55, z + .1, [20, 20, 22]);
   box(x - .23, x + .23, .78, 1.05, z + .3, z + .5, [30, 34, 38]);
-  const rear = z - (dir > 0 ? .7 : -.7);
   box(x - .27, x + .27, .82, 1.4, z - .95, z - .4, [30, 170, 150]);
   box(x - .06, x + .06, 0, .55, z - .95, z - .6, [12, 12, 14]); box(x - .06, x + .06, 0, .55, z + .4, z + .75, [12, 12, 14]);
-  const p = P((x - cam.x) * cam.dir, .68, (z - .95 - cam.z) * cam.dir); glow(p[0], p[1], 8, [255, 40, 30], .4);
+  const p = Pw(x, .68, z - .95); if (p) glow(p[0], p[1], 8, [255, 40, 30], .4);
 }
 
-let stats = { lastRain: 0 };
-function renderStreet(dt) {
-  const S = world.street; if (!S) return;
-  drawSky(); drawSkyline(S);
-  ctx.fillStyle = shade([70, 70, 74], FARZ); ctx.fillRect(0, HZ, SW, SH - HZ);
-  const d = cam.dir, hw = S.halfW, pav = S.pav;
-  // ground: pavements + road
-  const pc = groundGrad([148, 146, 140]), rc = groundGrad([62, 63, 68]);
-  strip(-hw - pav, -hw, .12, pc); strip(hw, hw + pav, .12, pc);
-  strip(-hw - .18, -hw, .125, groundGrad([180, 178, 172])); strip(hw, hw + .18, .125, groundGrad([180, 178, 172]));
-  strip(-hw, hw, 0, rc);
+// ---------- ground ----------
+function drawGround(S, cull) {
+  const hw = S.halfW, pav = S.pav, zc = camL.z, zlo = Math.max(-14, zc - 60), zhi = Math.min(cull, zc + FARZ + 20);
+  const pc = groundGrad([148, 146, 140]), rc = groundGrad([62, 63, 68]), kc = groundGrad([180, 178, 172]);
+  const zp0 = Math.max(10, zlo);
+  for (const sd of [-1, 1]) { strip(sd * hw, sd * (hw + pav), .12, pc, zp0, zhi); strip(sd < 0 ? -hw - .18 : hw, sd < 0 ? -hw : hw + .18, .125, kc, zp0, zhi); }
+  strip(-hw, hw, 0, rc, zlo, zhi);
   for (const p of S.patches) {
-    const a = (p.z - cam.z) * d, b = (p.z + p.l - cam.z) * d; if (Math.max(a, b) < NEAR || Math.min(a, b) > 90) continue;
-    const x0 = (p.x - cam.x) * d, x1 = (p.x + p.w - cam.x) * d;
-    poly(shade([54 * p.s, 55 * p.s, 60 * p.s], Math.max(Math.min(a, b), NEAR)), [x0, .004, Math.min(a, b), x1, .004, Math.min(a, b), x1, .004, Math.max(a, b), x0, .004, Math.max(a, b)]);
+    if (p.z > zhi || p.z + p.l < zlo || Math.abs(p.z - zc) > 100) continue;
+    poly(shade([54 * p.s, 55 * p.s, 60 * p.s], Math.abs(p.z - zc) + 4), [p.x, .004, p.z, p.x + p.w, .004, p.z, p.x + p.w, .004, p.z + p.l, p.x, .004, p.z + p.l]);
   }
-  // road markings
-  const zmin = Math.min(cam.z, cam.z + d * FARZ), zmax = Math.max(cam.z, cam.z + d * FARZ);
   const white = c => shade([224, 224, 218], c, .95);
-  if (S.centre) for (let z = Math.floor(zmin / 9) * 9; z < zmax; z += 9) {
-    let a = (z - cam.z) * d, b = (z + 3.5 - cam.z) * d; if (a > b) { const t = a; a = b; b = t; }
-    if (b < NEAR || a > 100) continue; a = Math.max(a, NEAR); const x0 = -cam.x * d - .07, x1 = -cam.x * d + .07;
-    poly(white(a), [Math.min(x0, x1), .006, a, Math.max(x0, x1), .006, a, Math.max(x0, x1), .006, b, Math.min(x0, x1), .006, b]);
+  const zs = Math.max(zp0, Math.floor((zc - 30) / 9) * 9);
+  if (S.centre) for (let z = zs; z < Math.min(zhi, zc + 110); z += 9) {
+    if (z > S.len - 6 && z < S.len + 14) continue;
+    toCam(0, z); const dm = Math.max(_rz, 1); poly(white(dm), [-.07, .006, z, .07, .006, z, .07, .006, z + 3.5, -.07, .006, z + 3.5]);
   }
-  if (S.yellow) { const yc = groundGrad([206, 176, 40]); for (const sd of [-1, 1]) { strip(sd * (hw - .4), sd * (hw - .32), .006, yc); strip(sd * (hw - .24), sd * (hw - .16), .006, yc); } }
-  for (const zz of S.zebras) for (let x = -hw + .3; x < hw - .3; x += 1.0) {
-    let a = (zz - cam.z) * d, b = (zz + 3.2 - cam.z) * d; if (a > b) { const t = a; a = b; b = t; } if (b < NEAR || a > 90) continue; a = Math.max(a, NEAR);
-    const x0 = (x - cam.x) * d, x1 = (x + .5 - cam.x) * d; poly(white(a), [Math.min(x0, x1), .007, a, Math.max(x0, x1), .007, a, Math.max(x0, x1), .007, b, Math.min(x0, x1), .007, b]);
-  }
-  if (S.signal) { const a = (S.stopZ - cam.z) * d, b = (S.stopZ + .3 - cam.z) * d; if (Math.max(a, b) > NEAR && Math.min(a, b) < 100) { const x0 = (-hw - cam.x) * d, x1 = (0 - cam.x) * d; poly(white(Math.max(Math.min(a, b), NEAR)), [Math.min(x0, x1), .007, Math.max(Math.min(a, b), NEAR), Math.max(x0, x1), .007, Math.max(Math.min(a, b), NEAR), Math.max(x0, x1), .007, Math.max(a, b), Math.min(x0, x1), .007, Math.max(a, b)]); } }
-  // pavement slab lines
+  if (S.yellow) { const yc = groundGrad([206, 176, 40]); for (const sd of [-1, 1]) { strip(sd * (hw - .4), sd * (hw - .32), .006, yc, zp0, Math.min(zhi, S.len - 6)); strip(sd * (hw - .24), sd * (hw - .16), .006, yc, zp0, Math.min(zhi, S.len - 6)); } }
+  for (const zz of S.zebras) for (let x = -hw + .3; x < hw - .3; x += 1.0) { toCam(x, zz); if (_rz < -5 || _rz > 100) continue; poly(white(Math.max(_rz, 1)), [x, .007, zz, x + .5, .007, zz, x + .5, .007, zz + 3.2, x, .007, zz + 3.2]); }
+  if (S.signal) poly(white(Math.max(1, S.stopZ - zc)), [-hw, .007, S.stopZ, 0, .007, S.stopZ, 0, .007, S.stopZ + .3, -hw, .007, S.stopZ + .3]);
   ctx.strokeStyle = shade([120, 118, 112], 12); ctx.lineWidth = 1; ctx.beginPath();
-  for (let z = Math.ceil(zmin / 1.4) * 1.4; z < zmax; z += 1.4) {
-    const r = (z - cam.z) * d; if (r < NEAR || r > 34) continue;
-    for (const sd of [-1, 1]) { const a = P((sd * hw - cam.x) * d, .12, r), b = P((sd * (hw + pav) - cam.x) * d, .12, r); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); }
+  for (let z = Math.ceil(Math.max(zp0, zc - 6) / 1.4) * 1.4; z < zc + 30; z += 1.4) for (const sd of [-1, 1]) {
+    const a = Pw(sd * hw, .12, z), b = Pw(sd * (hw + pav), .12, z); if (a && b) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); }
   }
   ctx.stroke();
-  // side streets
   for (const sd of [-1, 1]) for (const g of S.gaps[sd < 0 ? 'L' : 'R']) {
-    let a = (g.z0 - cam.z) * d, b = (g.z1 - cam.z) * d; if (a > b) { const t = a; a = b; b = t; } if (b < NEAR || a > FARZ) continue;
-    const an = Math.max(a, NEAR), x0 = (sd * hw - cam.x) * d, x1 = (sd * (hw + pav + 14) - cam.x) * d;
-    poly(rc, [x0, .13, an, x1, .13, an, x1, .13, b, x0, .13, b]);
-    poly(rc, [x0, .0, an, x1, .0, an, x1, .0, b, x0, .0, b]);
-    const wx = (sd * (hw + pav + 15) - cam.x) * d, wc = shade(PAL.brick[1], Math.max(an, 8), .85);
-    poly(wc, [wx, 0, an, wx, 0, b, wx, 9, b, wx, 9, an]);
+    if (g.z1 < zlo || g.z0 > zhi) continue;
+    if (g === S.jg && S.turnSide === sd) continue;
+    poly(rc, [sd * hw, .13, g.z0, sd * (hw + pav + 14), .13, g.z0, sd * (hw + pav + 14), .13, g.z1, sd * hw, .13, g.z1]);
+    toCam(sd * (hw + pav + 15), (g.z0 + g.z1) / 2);
+    poly(shade(PAL.brick[1], Math.max(_rz, 8), .85), [sd * (hw + pav + 15), 0, g.z0, sd * (hw + pav + 15), 0, g.z1, sd * (hw + pav + 15), 9, g.z1, sd * (hw + pav + 15), 9, g.z0]);
   }
-  // wet road sheen
   if (env.wet > .05) {
     const g = ctx.createLinearGradient(0, HZ, 0, HZ + (SH - HZ) * .55); const sc = mixc(env.skyBot, [255, 255, 255], .1);
     g.addColorStop(0, rgba(sc, .38 * env.wet)); g.addColorStop(1, rgba(sc, 0));
-    ctx.fillStyle = g; ctx.beginPath(); for (let i = 0; i < ZS.length; i++) { const p = P((-hw - cam.x) * d, 0, ZS[i]); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }
-    for (let i = ZS.length - 1; i >= 0; i--) { const p = P((hw - cam.x) * d, 0, ZS[i]); ctx.lineTo(p[0], p[1]); } ctx.fill();
+    poly(g, [-hw, .002, zlo, hw, .002, zlo, hw, .002, zhi, -hw, .002, zhi]);
   }
-  // buildings far -> near
-  for (const arr of [S.L, S.Rt]) {
-    if (d > 0) for (let i = arr.length - 1; i >= 0; i--) drawLot(S, arr[i]); else for (let i = 0; i < arr.length; i++) drawLot(S, arr[i]);
+}
+
+// ---------- main street render ----------
+function streetList() {
+  const list = [{ S: world.street, fr: IDENT, cull: world.street.cullFar || 1e9 }];
+  if (world.turn) list.push({ S: world.turn.S1, fr: world.turn.fr, cull: 1e9 });
+  if (world.prev) list.push({ S: world.prev.S, fr: world.prev.fr, cull: world.prev.S.cullFar || 1e9 });
+  return list;
+}
+function renderStreet(dt) {
+  const S0 = world.street; if (!S0) return;
+  texBudgetReset(); setFrame(IDENT);
+  drawSky(); drawSkyline(S0);
+  ctx.fillStyle = shade([70, 70, 74], FARZ); ctx.fillRect(0, HZ, SW, SH - HZ);
+  const list = streetList();
+  for (const it of list) { setFrame(it.fr); drawGround(it.S, it.cull); }
+  const lots = [];
+  for (const it of list) {
+    setFrame(it.fr);
+    for (const arr of [it.S.L, it.S.Rt]) for (const l of arr) {
+      if (l.z0 > it.cull) continue;
+      toCam(l.x, (l.z0 + l.z1) / 2); const half = (l.z1 - l.z0) / 2 + 2;
+      if (_rz + half < NEAR || _rz - half > FARZ + 20) continue;
+      l.depth = Math.max(_rz, 1); lots.push({ d: _rz, S: it.S, fr: it.fr, l });
+    }
   }
-  // dynamic things sorted
-  const items = [], depth = z => (z - cam.z) * d;
-  for (const f of S.furn) { const r = depth(f.z); if (r > NEAR && r < FARZ) items.push({ d: r, f: () => drawFurn(S, f) }); }
-  for (const c of S.parked) { const r = depth(c.z); if (r > NEAR - 3 && r < FARZ) items.push({ d: r, f: () => drawVeh({ axis: 'z', x: c.x, z: c.z, len: c.len, w: c.w, h: c.h, type: c.type, col: c.col, dir: c.side < 0 ? 1 : -1, brake: false }) }); }
-  for (const v of S.veh) { const r = depth(v.z); if (r > NEAR - 6 && r < FARZ) items.push({ d: r, f: () => drawVeh(v) }); }
-  for (const v of S.cross) { const r = depth(v.z); if (r > NEAR && r < FARZ) items.push({ d: r, f: () => drawVeh(v) }); }
-  for (const p of S.peds) { const r = depth(p.z); if (r > 1.2 && r < 110) items.push({ d: r, f: () => drawPed(p, S, r) }); }
-  if (S.signal) items.push({ d: depth(S.stopZ + .5), f: () => drawSignal(S) });
-  if (!scene.rideActive) items.push({ d: depth(R.z), f: () => drawScooter(R.x, R.z, 1) });
+  lots.sort((p, q) => q.d - p.d);
+  for (const o of lots) { setFrame(o.fr); drawLot(o.S, o.l, Math.max(o.d - (o.l.z1 - o.l.z0) / 2, 1)); }
+  const items = [];
+  const add = (it, x, z, f, pad) => { setFrame(it.fr); toCam(x, z); if (_rz > NEAR - (pad || 4) && _rz < FARZ + 5) items.push({ d: _rz, fr: it.fr, f }); };
+  for (const it of list) {
+    const S = it.S;
+    for (const f of S.furn) if (f.z < it.cull) add(it, f.x, f.z, () => drawFurn(S, f), 2);
+    for (const c of S.parked) if (c.z < it.cull) add(it, c.x, c.z, () => drawVeh({ axis: 'z', x: c.x, z: c.z, len: c.len, w: c.w, h: c.h, type: c.type, col: c.col, dir: c.side < 0 ? 1 : -1, brake: false }), 6);
+    for (const v of S.veh) if (v.z < it.cull) add(it, v.x, v.z, () => drawVeh(v), 6);
+    for (const v of S.cross) add(it, v.x, v.z, () => drawVeh(v), 6);
+    for (const p of S.peds) if (p.z < it.cull) add(it, p.x, p.z, () => drawPed(p), 1);
+    if (S.signal) add(it, -S.halfW, S.stopZ + .5, () => drawSignal(S), 3);
+  }
+  if (!scene.rideActive && !world.turn) add(list[0], R.x, R.z, () => drawScooter(R.x, R.z), 3);
   items.sort((p, q) => q.d - p.d);
-  for (const it of items) it.f();
-  // atmosphere
-  if (env.night > .45) {
-    const a = ((env.night - .45) * .3).toFixed(2); ctx.fillStyle = 'rgba(6,8,20,' + a + ')'; ctx.fillRect(0, 0, SW, SH);
-  }
+  for (const it of items) { setFrame(it.fr); it.f(); }
+  setFrame(IDENT);
+  if (env.night > .45) { ctx.fillStyle = 'rgba(6,8,20,' + ((env.night - .45) * .3).toFixed(2) + ')'; ctx.fillRect(0, 0, SW, SH); }
 }

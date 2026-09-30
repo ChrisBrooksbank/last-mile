@@ -10,17 +10,18 @@ function updateCamera(dt) {
   scene.eyeH = scene.eyeH === undefined ? 1.22 : scene.eyeH + (tgt - scene.eyeH) * (1 - Math.exp(-dt * 2.5));
   HZ = HZ0;
   if (scene.rideActive) {
-    const sp = Math.min(R.v / 8, 1);
-    cam.z = R.z; cam.x = R.x + Math.sin(R.dist * .35) * .03; cam.dir = 1;
+    const sp = Math.min(R.v / 8, 1), T = world.turn;
+    cam.z = R.z; cam.x = R.x + Math.sin(R.dist * .35) * .03;
     cam.h = scene.eyeH + Math.sin(R.dist * 2.1) * .008 * sp + (Math.sin(R.dist * 9.1) + Math.sin(R.dist * 13.7)) * .0035 * sp;
-    cam.yawPx = world.yaw * SW; cam.bend = S.curve;
+    cam.yawPx = 0;
+    if (T) { setHeading(T.th); cam.roll = T.s * .16 * Math.sin(Math.PI * T.u); }
+    else { setHeading(0); cam.roll = (R.x - R.tx) * .01; }
     scene.pitch += ((R.braking ? .012 : 0) - scene.pitch) * (1 - Math.exp(-dt * 4));
     HZ = HZ0 + scene.pitch * SH;
-    cam.roll = -world.yaw * .12 + (R.x - R.tx) * .01;
   } else {
-    cam.z = scene.wz; cam.x = scene.wx + Math.sin(scene.wph) * .03; cam.dir = scene.wdir;
+    cam.z = scene.wz; cam.x = scene.wx + Math.sin(scene.wph) * .03; setHeading(scene.wdir > 0 ? 0 : Math.PI);
     cam.h = scene.eyeH + Math.abs(Math.sin(scene.wph)) * .04;
-    cam.yawPx = scene.look * SW * .3 + world.yaw * SW; cam.bend = S.curve * scene.wdir;
+    cam.yawPx = scene.look * SW * .3;
     cam.roll = Math.sin(scene.wph) * .003;
   }
 }
