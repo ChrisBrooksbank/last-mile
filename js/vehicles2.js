@@ -114,3 +114,30 @@ function drawCyclist(v) {
   if (away) { const gl = Math.max(.4, env.lamp); glow(bx, by - .62 * s, .35 * s, [255, 30, 24], .7 * gl); ctx.fillStyle = emit([255, 40, 30], rz, .9); ctx.fillRect(bx - .03 * s, by - .66 * s, .06 * s, .08 * s); }
   else { glow(bx, by - 1.0 * s, .35 * s, [255, 250, 220], .6 * Math.max(.3, env.lamp)); }
 }
+
+// ---------- the moped's own headlight: on after dark, and in fog or heavy rain ----------
+let hlOn = 0, hlWas = false;
+function drawHeadlight(dt) {
+  const want = clamp((env.night - .25) * 1.7, 0, 1) || 0, dull = (env.fog > .012 || env.rain > .5) && env.amb < .75 ? .7 : 0, target = Math.max(want, dull);
+  hlOn += (target - hlOn) * (1 - Math.exp(-dt * 3));
+  const on = hlOn > .5; if (on !== hlWas) { hlWas = on; if (Snd.on) Snd.click(); }
+  scene.headlight = hlOn;
+  if (hlOn < .03) return;
+  const rzN = 2.2, rzF = 36, fogK = 1 - Math.min(.5, env.fog * 28);
+  const cx = CXs + cam.yawPx, cy = HZ + cam.h * F / 9, rad = SH * .62;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  // several nested cones give a soft, feathered edge instead of one hard trapezoid
+  for (const k of [1.25, 1.0, .78, .56, .36]) {
+    const hw = z => (.5 + z * .11) * k;
+    const pts = [P(-hw(rzN), 0, rzN), P(-hw(rzF), 0, rzF), P(-hw(rzF) * .9, 2.1, rzF), P(hw(rzF) * .9, 2.1, rzF), P(hw(rzF), 0, rzF), P(hw(rzN), 0, rzN)];
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad), a = hlOn * fogK * .17;
+    g.addColorStop(0, 'rgba(255,246,222,' + (a * 1.5).toFixed(3) + ')'); g.addColorStop(.55, 'rgba(255,240,210,' + (a * .6).toFixed(3) + ')'); g.addColorStop(1, 'rgba(255,236,200,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let q = 1; q < pts.length; q++) ctx.lineTo(pts[q][0], pts[q][1]); ctx.closePath(); ctx.fill();
+  }
+  // hot spot on the road just ahead, and a long wet-road reflection down the middle
+  const near = P(0, 0, 7); const sp = ctx.createRadialGradient(near[0], near[1], 0, near[0], near[1], SW * .3);
+  sp.addColorStop(0, 'rgba(255,250,232,' + (.4 * hlOn).toFixed(3) + ')'); sp.addColorStop(1, 'rgba(255,250,232,0)');
+  ctx.save(); ctx.translate(near[0], near[1]); ctx.scale(1, .32); ctx.translate(-near[0], -near[1]); ctx.fillStyle = sp; ctx.fillRect(near[0] - SW * .3, near[1] - SW * .3, SW * .6, SW * .6); ctx.restore();
+  if (env.wet > .2) { const top = P(0, 0, 45)[1], bot = P(0, 0, 3)[1], rg = ctx.createLinearGradient(0, top, 0, bot); rg.addColorStop(0, 'rgba(255,244,214,0)'); rg.addColorStop(1, 'rgba(255,244,214,' + (.16 * env.wet * hlOn).toFixed(3) + ')'); ctx.fillStyle = rg; ctx.fillRect(cx - SW * .05, top, SW * .1, bot - top); }
+  ctx.restore();
+}

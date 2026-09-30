@@ -64,12 +64,23 @@ const Snd = (() => {
   const FEM = /female|zira|hazel|susan|libby|sonia|maisie|jenny|aria|emma|amy|kate|serena|fiona|samantha|karen|moira|tessa|olivia|natasha|clara|ava/i;
   const MAL = /(?<!fe)male|george|ryan|daniel|thomas|oliver|guy|david|mark|alfie|arthur|james|liam|william|connor/i;
   const hashKey = k => { let h = 7; for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) | 0; return Math.abs(h); };
+  // rank voices: neural / online / premium ones sound far more human than the basic local ones
+  function voiceScore(v, female) {
+    let s = 0; const n = v.name || '';
+    if (/en[-_]GB/i.test(v.lang)) s += 100; else if (/en[-_](AU|IE|ZA|NZ)/i.test(v.lang)) s += 50; else if (/^en/i.test(v.lang)) s += 30;
+    if (/natural|neural|online|premium|enhanced|wavenet|studio/i.test(n)) s += 90;
+    if (/google/i.test(n)) s += 35;
+    if (!v.localService) s += 25;
+    if (/compact|espeak|festival/i.test(n)) s -= 80;
+    const isF = FEM.test(n), isM = MAL.test(n) && !isF;
+    if (female ? isF : isM) s += 45; else if (female ? isM : isF) s -= 60;
+    return s;
+  }
   function pickVoice(female, key) {
-    let pool = voiceList.filter(v => /en[-_]GB/i.test(v.lang));
-    if (!pool.length) pool = voiceList.filter(v => /^en/i.test(v.lang));
-    let g = pool.filter(v => female ? FEM.test(v.name) : (MAL.test(v.name) && !FEM.test(v.name)));
-    if (!g.length) g = pool;
-    return g.length ? g[hashKey(key) % g.length] : null;
+    const ranked = voiceList.map(v => ({ v, s: voiceScore(v, female) })).sort((x, y) => y.s - x.s);
+    if (!ranked.length) return null;
+    const top = ranked.filter(r => r.s >= ranked[0].s - 12);
+    return top[hashKey(key) % top.length].v;
   }
 
   // s: {speed, scene ('street'|'shop'|'tunnel'|'black'), indoor, rain, traffic, night, walking}
@@ -128,8 +139,9 @@ const Snd = (() => {
       const key = who || 'x', j = (hashKey(key) % 100) / 100, female = !!o.female;
       const u = new SpeechSynthesisUtterance(text.replace(/…/g, '...').replace(/\s+/g, ' '));
       const v = pickVoice(female, key); if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-GB';
-      u.pitch = o.pitch || (female ? 1.02 + j * .25 : .82 + j * .28);
-      u.rate = o.rate || (.96 + j * .14);
+      // keep pitch/rate close to the voice's natural values; big shifts are what make speech sound synthetic
+      u.pitch = clamp((o.pitch || (female ? 1.04 + j * .1 : .94 + j * .1)) * (female ? 1 : 1.08), .9, 1.14);
+      u.rate = clamp(o.rate || (.98 + j * .07), .92, 1.06);
       u.volume = o.vol || .95;
       const h = { done: false };
       u.onend = u.onerror = () => { h.done = true; };

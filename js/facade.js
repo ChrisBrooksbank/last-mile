@@ -174,8 +174,8 @@ function buildLotTex(S, l) {
       e.fillStyle = 'rgba(255,255,255,.6)'; e.fillRect.apply(e, mm(.78, .85, .44, .25));
     }
   } else if (l.kind === 'house') {
-    const dw = 1.0, dh = 2.3, dx0 = doorX - dw / 2, lift = l.setback > 1 ? .6 : .35;
-    const dcol = DOORS[(hash(l.seed, 9) * DOORS.length) | 0];
+    const dw = 1.0, dh = 2.3, dx0 = doorX - dw / 2, lift = l.lift !== undefined ? l.lift : (l.setback > 1 ? .6 : .35);
+    const dcol = l.doorCol || DOORS[(hash(l.seed, 9) * DOORS.length) | 0];
     // ground windows
     for (const wx of [Math.max(.9, doorX - 2.3), Math.min(len - .9, doorX + 2.3)]) if (Math.abs(wx - doorX) > 1.5 && wx > .6 && wx < len - .6) sash(wx, .95, .95, 1.7, r.c(l.lit));
     // basement area railing
@@ -189,9 +189,9 @@ function buildLotTex(S, l) {
     // fanlight
     const fl = a.createLinearGradient(0, H - (lift + dh) * ppm, 0, H - (lift + dh - .5) * ppm); fl.addColorStop(0, '#f2d9a4'); fl.addColorStop(1, '#a58350'); a.fillStyle = fl; a.fillRect.apply(a, mm(dx0 + .1, lift + dh - .5, dw - .2, .4));
     e.fillStyle = 'rgba(255,215,150,' + (r.c(.75) ? .85 : .0) + ')'; e.fillRect.apply(e, mm(dx0 + .1, lift + dh - .5, dw - .2, .4));
-    rc(a, '#c9b070', dx0 + dw - .2, lift + 1.1, .08, .08); rc(a, '#e8e6e0', dx0 + dw + .05, lift + 1.7, .12, .09); a.fillStyle = '#222'; a.font = 'bold ' + Math.max(5, .12 * ppm) + 'px Arial'; a.fillText(String(l.num || ''), (dx0 + dw + .05) * ppm, H - (lift + 1.62) * ppm);
+    rc(a, '#c9b070', dx0 + dw - .2, lift + 1.1, .08, .08); rc(a, '#e8e6e0', dx0 + dw + .05, lift + 1.7, .12, .09); a.fillStyle = '#222'; a.font = 'bold ' + Math.max(5, .12 * ppm) + 'px Arial'; a.fillText(String(l.num !== undefined && l.num !== null ? l.num : ''), (dx0 + dw + .05) * ppm, H - (lift + 1.62) * ppm);
     // steps
-    for (let s = 0; s < (l.setback > 1 ? 3 : 2); s++) rc(a, s % 2 ? rgb(mulc(stone, .9)) : rgb(stone), dx0 - .25 - s * .05, s * lift / 3, dw + .5 + s * .1, lift / 3);
+    if (!l.noSteps) for (let s = 0; s < (l.setback > 1 ? 3 : 2); s++) rc(a, s % 2 ? rgb(mulc(stone, .9)) : rgb(stone), dx0 - .25 - s * .05, s * lift / 3, dw + .5 + s * .1, lift / 3);
     // lamp
     rc(a, '#222', dx0 - .35, lift + 1.9, .1, .18); e.fillStyle = 'rgba(255,230,170,.9)'; e.fillRect.apply(e, mm(dx0 - .34, lift + 1.92, .08, .14));
   } else if (l.kind === 'block') {
@@ -216,7 +216,7 @@ function buildLotTex(S, l) {
     const ct = hM - .55; rc(a, rgb(stone), -.05, ct, len + .1, .55); rc(a, 'rgba(255,255,255,.25)', -.05, hM - .1, len + .1, .1); rc(a, 'rgba(0,0,0,.42)', 0, ct - .3, len, .3);
     if (mat === 'stucco') for (let x = .1; x < len; x += .32) rc(a, 'rgba(0,0,0,.2)', x, ct + .08, .16, .2);
     if (r.c(.4) && mat !== 'concrete') rc(a, 'rgba(24,26,28,.85)', r.c(.5) ? .18 : len - .28, 0, .1, hM - .5);  // down pipe
-    if (r.c(.14) && l.kind !== 'block' && mat !== 'stucco') { // fire escape
+    if (r.c(.14) && l.kind !== 'block' && mat !== 'stucco' && l.kind !== 'house') { // fire escape
       const fx = len * r.r(.3, .6), fw = Math.min(2.6, len * .4); a.strokeStyle = 'rgba(16,18,20,.9)'; a.lineWidth = Math.max(1, ppm * .04);
       for (let f = 1; f < Math.min(l.floors, 5); f++) { const yy = l.gh + (f - 1) * l.fh + .1; rc(a, 'rgba(16,18,20,.9)', fx, yy, fw, .07); for (let bx = 0; bx <= fw; bx += .12) rc(a, 'rgba(16,18,20,.7)', fx + bx, yy, .015, .8); a.beginPath(); a.moveTo((fx + (f % 2 ? fw : 0)) * ppm, H - yy * ppm); a.lineTo((fx + (f % 2 ? .4 : fw - .4)) * ppm, H - (yy - l.fh) * ppm); a.stroke(); }
     }
@@ -236,4 +236,42 @@ function getLotTex(S, l) {
   if ((l.depth || 999) > 40 && performance.now() - _texBudgetT0 > 7) return null;
   l.tex = buildLotTex(S, l);
   return l.tex;
+}
+
+// ---------- tiling ground textures (asphalt, paving slabs) with mip variants ----------
+const GPAT = {};
+function makeGroundTex(kind) {
+  const N = 256, c = C2(N, N), g = c.getContext('2d'), r = new RNG(kind === 'slabs' ? 91 : 17);
+  if (kind === 'asphalt') {
+    g.fillStyle = 'rgb(62,63,68)'; g.fillRect(0, 0, N, N);
+    for (let i = 0; i < 10; i++) {
+      const x = r.r(0, N), y = r.r(0, N), rad = r.r(30, 84), a = r.r(.04, .11), dark = r.c(.6);
+      for (const ox of [-N, 0, N]) for (const oy of [-N, 0, N]) { const gr = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, rad); gr.addColorStop(0, dark ? 'rgba(20,20,24,' + a + ')' : 'rgba(126,126,132,' + a + ')'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x + ox - rad, y + oy - rad, rad * 2, rad * 2); }
+    }
+    for (let i = 0; i < 3400; i++) { const v = r.i(26, 122); g.fillStyle = 'rgba(' + v + ',' + v + ',' + (v + 4) + ',' + r.r(.25, .7).toFixed(2) + ')'; g.fillRect(r.n() * N, r.n() * N, r.c(.2) ? 2 : 1, r.c(.2) ? 2 : 1); }
+    for (let i = 0; i < 240; i++) { g.fillStyle = 'rgba(158,158,162,' + r.r(.15, .42).toFixed(2) + ')'; g.fillRect(r.n() * N, r.n() * N, 2, 2); }
+    g.strokeStyle = 'rgba(16,16,18,.55)'; g.lineWidth = 1;
+    for (let k = 0; k < 3; k++) { let x = r.r(24, N - 24), y = r.r(16, N - 60); g.beginPath(); g.moveTo(x, y); for (let s = 0; s < 12; s++) { x += r.r(-9, 9); y += r.r(4, 11); g.lineTo(Math.max(2, Math.min(N - 2, x)), Math.min(N - 1, y)); } g.stroke(); }
+    return { c, ppm: 64 };
+  }
+  const S = 64;
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    const v = r.r(-10, 10); g.fillStyle = 'rgb(' + (152 + v) + ',' + (149 + v) + ',' + (142 + v) + ')'; g.fillRect(i * S, j * S, S, S);
+    for (let k = 0; k < 46; k++) { const w = r.i(30, 210); g.fillStyle = 'rgba(' + w + ',' + w + ',' + (w - 4) + ',.18)'; g.fillRect(i * S + r.n() * S, j * S + r.n() * S, 1 + r.n() * 2, 1 + r.n() * 2); }
+    if (r.c(.25)) { g.fillStyle = 'rgba(40,36,30,.10)'; g.beginPath(); g.ellipse(i * S + r.r(10, 54), j * S + r.r(10, 54), r.r(6, 20), r.r(4, 12), r.n() * 3, 0, TAU); g.fill(); }
+    if (r.c(.3)) { g.fillStyle = 'rgba(60,56,52,.4)'; for (let k = 0; k < 3; k++) { g.beginPath(); g.ellipse(i * S + r.r(8, 56), j * S + r.r(8, 56), 1.6, 1.3, 0, 0, TAU); g.fill(); } }
+    g.fillStyle = 'rgba(70,68,64,.85)'; g.fillRect(i * S, j * S, S, 2); g.fillRect(i * S, j * S, 2, S);
+    g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(i * S + 2, j * S + 2, S - 2, 1);
+  }
+  return { c, ppm: N / 2.4 };
+}
+function groundPattern(kind, lv) {
+  let e = GPAT[kind];
+  if (!e) { const t = makeGroundTex2(kind); e = GPAT[kind] = { base: t.c, ppm: t.ppm, pats: [] }; }
+  if (!e.pats[lv]) {
+    let src = e.base;
+    if (lv) { const k = 1 / (1 << lv), c = C2(e.base.width * k, e.base.height * k), g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(e.base, 0, 0, c.width, c.height); src = c; }
+    e.pats[lv] = ctx.createPattern(src, 'repeat');
+  }
+  return { pat: e.pats[lv], ppm: e.ppm / (1 << lv) };
 }

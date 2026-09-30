@@ -125,6 +125,8 @@ function person(o) {
     if (o.walk) { const sv = Math.sin(ph + (s > 0 ? 0 : Math.PI)) * 3; wy -= sv; ey -= sv * .4; }
     if (o.act === 'wave' && s === 1) { ex = s * (sw + 4); ey = -73; wx = s * (sw + 3) + Math.sin((o.actT || 0) * 11) * 3; wy = -93; }
     else if (o.act === 'talk' && s === 1) { ex = s * (sw + 3); ey = -65; wx = s * 6; wy = -63 + Math.sin((o.actT || 0) * 6) * 3; }
+    else if (o.actL && s === -1) { ex = s * (sw + 3.5); ey = -66; wx = s * 8 + Math.sin((o.actT || 0) * 5) * 3; wy = -66 + Math.sin((o.actT || 0) * 4.3) * 3; }
+    else if (o.hold && s === 1 && o.reach === undefined) { ex = s * (sw + 4.5); ey = -69; wx = s * 17; wy = -72; }
     else if (o.phone && s === 1 && o.reach === undefined) { ex = s * (sw + 2); ey = -67; wx = s * 6; wy = -73; }
     limb(shx, shy, ex, ey, 5.6, 4.8, sleeveCol, true); limb(ex, ey, wx, wy, 4.8, 3.9, sleeveCol, true);
     if (outfit === 'jacket' || outfit === 'coat' || outfit === 'hoodie') { g.fillStyle = S(mulc(sleeveCol, .78)); g.beginPath(); g.ellipse(wx, wy, 2.3, 1.2, 0, 0, TAU); g.fill(); }

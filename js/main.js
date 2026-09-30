@@ -59,13 +59,15 @@ function render(dt) {
     ctx.restore();
     drawWeatherFx(dt, scene.rideActive);
     if (world.flashA > .02) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(' + (world.flashPh ? '20,50,150' : '10,20,70') + ',' + (world.flashA * .28).toFixed(3) + ')'; ctx.fillRect(0, 0, SW, SH); ctx.globalCompositeOperation = 'source-over'; }
-    if (scene.rideActive) { drawBike(dt); drawPhone(dt, true); drawMerch(dt); }
+    if (scene.rideActive) { drawHeadlight(dt); drawBike(dt); drawPhone(dt, true); drawMerch(dt); }
     else { if (scene.carry) drawBag(SW * .82, SH * 1.02 + Math.abs(Math.sin(scene.wph)) * -6, SH * .32, scene.carry); if (phone.g > .03) drawPhone(dt, false); }
   } else if (scene.mode === 'tunnel') {
     renderTunnel(dt);
     if (scene.tun && scene.tun.out) drawWeatherFx(dt, false);
     if (scene.carry) drawBag(SW * .82, SH * 1.02 + Math.abs(Math.sin(scene.wph)) * -6, SH * .32, scene.carry);
     if (phone.g > .03) drawPhone(dt, false);
+  } else if (scene.mode === 'selfie') {
+    renderSelfie(dt); drawWeatherFx(dt, false);
   } else if (scene.mode === 'shop') {
     renderShop(dt);
     if (phone.g > .03) drawPhone(dt, false);
@@ -78,13 +80,13 @@ function render(dt) {
 
 function frame(now) {
   const dt = Math.min(.05, (now - last) / 1000); last = now; DT = dt;
-  for (let i = 0; i < STEPS; i++) { updateEnv(dt); updateWorld(dt); stepStory(dt); }
+  for (let i = 0; i < STEPS; i++) { updateEnv(dt); updateWorld(dt); stepStory(dt); stepSub(dt); }
   updateCamera(dt);
   render(dt);
   if (capTimer > 0) { capTimer -= dt; if (capTimer <= 0) capEl.classList.remove('on'); }
   ambient(dt);
   const S = world.street;
-  Snd.update({ speed: R.v, scene: scene.mode === 'tunnel' ? (scene.tun && scene.tun.out ? 'street' : 'tunnel') : scene.mode, riding: scene.mode === 'street' && scene.rideActive,
+  Snd.update({ speed: R.v, scene: scene.mode === 'tunnel' ? (scene.tun && scene.tun.out ? 'street' : 'tunnel') : (scene.mode === 'selfie' ? 'street' : scene.mode), riding: scene.mode === 'street' && scene.rideActive,
     rain: env.rain, wet: env.wet, wind: env.fog, traffic: S ? S.D.traffic : .5, night: env.night, busy: scene.shop ? scene.shop.others.length : 0 });
   hudT -= dt;
   if (hudT <= 0 && S) {

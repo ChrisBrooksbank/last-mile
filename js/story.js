@@ -48,6 +48,7 @@ function mkCustomer(dest, plan) {
     noAnswer: (type === 'flat' || type === 'estate' || type === 'tower') && G.c(.12), building: G.p(BLDG), unit: G.i(2, 24), num: G.i(3, 88), street: plan.name, gate: G.c(.15) };
   c.addr = (type === 'house' || type === 'direct') ? c.num + ' ' + plan.name : 'Flat ' + c.unit + ', ' + c.building;
   c.doorNum = (type === 'house' || type === 'direct') ? String(c.num) : String(c.unit);
+  if (!c.doorNum || c.doorNum === 'undefined') c.doorNum = '12';
   c.light = G.c(.6);
   return c;
 }
@@ -217,14 +218,14 @@ function* doPickup(tr) {
 
 function* inShop(tr) {
   const busy = G.i(0, busyness() > .7 ? 2 : 1);
-  scene.shop = makeShop(tr.cu, busy); scene.mode = 'shop'; scene.wph = 0; scene.rideActive = false;
+  scene.shop = makeShop(tr.cu, busy); scene.shop.order = tr.order.slice(-3); scene.mode = 'shop'; scene.wph = 0; scene.rideActive = false;
   const S = scene.shop, st = S.staff[0], name = tr.cust.first, sp = st.look.female ? 200 : 135;
   const chatty = (tr.outcome === 'short' || tr.outcome === 'long') && G.c(.55);
   if (chatty && !S.others.length) S.others.push(mkOther());
   yield* fade(0, .5);
   Snd.clatter();
   yield .8;
-  yield* speak('Staff', G.p(['Hi, collecting?', 'Evening — pick up?', 'Yeah?', 'Hello, delivery?']), sp);
+  yield* speak('Staff', G.p(S.venue === 'ghost' ? ['Courier? Which order?', 'Number on your app?', 'Name on the order?'] : S.venue === 'sit' ? ['Good evening, can I help?', 'Hi there, collecting an order?'] : ['Hi, collecting?', 'Evening — pick up?', 'Yeah?', 'Hello, delivery?']), sp);
   yield* speak('You', G.p(['Order for ' + name + '.', 'Collecting for ' + name + ', please.', 'Pickup for ' + name + '.']), 120);
   const handOver = function* (line) {
     Snd.bag(); for (let t = 0; t < .8; t += DT) { S.bag = t / .8; st.reach = Math.min(1, t / .5); yield 0; }
@@ -449,12 +450,62 @@ function sayChain(lines, i, onEnd) {
   };
   world.later.push({ t: world.time + .25, fn: poll });
 }
-function canMerch() { return !merchActive && scene.rideActive && !world.turn && phone.mode === 'idle' && world.street && !world.street.veh.some(u => u.emerg); }
+function canMerch() { return !merchActive && scene.rideActive && !world.turn && phone.mode === 'idle' && R.parkZ == null && world.street && !world.street.veh.some(u => u.emerg); }
+// a free stretch of kerb ahead where he can stop for the spot to camera
+function findBay() {
+  const S = world.street; if (!S || S.dest) return null;
+  for (const side of [-1, 1]) for (let z = R.z + 40; z < Math.min(R.z + 110, S.len - 50); z += 2) {
+    const a = z - 6, b = z + 3.5; let ok = true;
+    for (const c of S.parked) if (c.side === side && c.z + c.len / 2 > a && c.z - c.len / 2 < b) { ok = false; break; }
+    if (!ok) continue;
+    for (const g of S.gaps[side < 0 ? 'L' : 'R']) if (g.z1 > a - 2 && g.z0 < b + 2) ok = false;
+    if (S.zebras.some(zc => zc > a - 6 && zc < b + 6)) ok = false;
+    if (S.furn.some(f => (f.k === 'bus' || f.k === 'cones' || f.k === 'phone' || f.k === 'rack' || f.k === 'cabinet' || f.k === 'belisha') && f.side === side && f.z > a - 2 && f.z < b + 2)) ok = false;
+    if (S.signal && S.stopZ - z < 30) ok = false;
+    if (ok) return { z, x: side * (S.halfW - .85), side };
+  }
+  return null;
+}
 function startMerch() {
   if (!canMerch()) return false;
-  merchActive = true; scene.merchTarget = 1; Snd.click();
-  sayChain(G.p(MERCH_SCRIPTS), 0, () => { scene.merchTarget = 0; world.later.push({ t: world.time + 1.2, fn: () => { merchActive = false; } }); });
-  return true;
+  const bay = findBay(); if (!bay) return false;
+  merchActive = true; R.parkZ = bay.z; R.parkX = bay.x; R.merchStop = true; R.parked = false;
+  runSub(merchSpot(bay)); return true;
+}
+function* merchSpot(bay) {
+  let t = 0; while (!R.parked && t < 45) { t += DT; yield 0; }
+  if (!R.parked) { R.parkZ = null; R.merchStop = false; merchActive = false; return; }
+  Snd.stand(); yield .5; yield* fade(1, .3);
+  scene.rideActive = false; scene.walking = false; scene.mode = 'selfie';
+  scene.selfie = { t: 0, side: bay.side, hold: 0, holdT: 0, flav: 0, flavT: 0, code: 0, codeT: 0, talk: false };
+  yield* fade(0, .5); Snd.click(); yield .5;
+  const lines = G.p(MERCH_SCRIPTS);
+  scene.selfie.holdT = 1; scene.selfie.talk = true;
+  for (let i = 0; i < lines.length; i++) {
+    if (i === 1) scene.selfie.flavT = 1;
+    if (i === 2) scene.selfie.codeT = 1;
+    yield* speak('You', lines[i], 118, false);
+  }
+  yield* speak('You', G.p(['Right, back to work!', 'Anyway. Orders to deliver.', 'Cheers. Now, where is that next order?']), 118, false);
+  scene.selfie.talk = false; scene.selfie.holdT = 0; scene.selfie.flavT = 0; scene.selfie.codeT = 0; yield .7;
+  yield* fade(1, .3);
+  scene.mode = 'street'; scene.selfie = null; scene.rideActive = true; R.parked = false; R.parkZ = null; R.merchStop = false; R.v = 0; R.tx = laneX(world.street);
+  yield* fade(0, .4); Snd.stand(); yield 2.5; merchActive = false;
+}
+
+// a second, independent coroutine for one-off scenes (same yield rules as the main story)
+let sub = null;
+function runSub(gen) { sub = { gen, waitT: 0, waitFn: null }; }
+function stepSub(dt) {
+  if (!sub) return;
+  if (sub.waitFn) { if (!sub.waitFn(dt)) return; sub.waitFn = null; }
+  else if (sub.waitT > 0) { sub.waitT -= dt; if (sub.waitT > 0) return; }
+  for (let guard = 0; guard < 50; guard++) {
+    const r = sub.gen.next(); if (r.done) { sub = null; return; }
+    const y = r.value;
+    if (typeof y === 'number') { sub.waitT = Math.max(y, .0001); return; }
+    if (typeof y === 'function') { sub.waitFn = y; if (!y(dt)) return; sub.waitFn = null; }
+  }
 }
 
 let trips = 0;

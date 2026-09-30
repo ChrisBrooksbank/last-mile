@@ -193,6 +193,7 @@ function drawBike(dt) {
     ctx.fillStyle = '#7ce9ff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 ' + (r * 1.05 | 0) + 'px system-ui,sans-serif';
     ctx.fillText(Math.round(v * 2.237), cx, cy - r * .12); ctx.font = '600 ' + (r * .32 | 0) + 'px system-ui,sans-serif'; ctx.fillStyle = '#4fa8b8'; ctx.fillText('mph', cx, cy + r * .5);
     ctx.fillStyle = '#4ade80'; ctx.fillRect(cx - r * 1.2, cy - r * .85, r * 2.4 * (0.78 - (phone.trips * .012)), r * .12);
+    if ((scene.headlight || 0) > .5) { ctx.strokeStyle = '#4da3ff'; ctx.lineWidth = 2; ctx.lineCap = 'round'; const ix = cx + r * 1.35, iy = cy + r * .55; ctx.beginPath(); ctx.arc(ix, iy, r * .17, -Math.PI / 2, Math.PI / 2); ctx.stroke(); for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(ix - r * .06, iy + k * r * .12); ctx.lineTo(ix - r * .3, iy + k * r * .12); ctx.stroke(); } }
     if (R.ind && Math.floor(t * 2.6) % 2 === 0) { ctx.fillStyle = '#5cff8a'; ctx.beginPath(); const ax = cx + R.ind * r * 1.25, ay = cy - r * .5; ctx.moveTo(ax + R.ind * r * .3, ay); ctx.lineTo(ax - R.ind * r * .1, ay - r * .22); ctx.lineTo(ax - R.ind * r * .1, ay + r * .22); ctx.fill(); }
   }
   ctx.restore();
@@ -395,7 +396,7 @@ function drawDoorway(t, z, open, cust, arm, bagT) {
   ctx.restore();
   // door leaf swung open
   const lw = (br[0] - tl[0]) * .9 * (1 - open * .85);
-  ctx.fillStyle = rgb(mulc(t.items.find(i => i.door && i.spec) ? t.items.find(i => i.door && i.spec).col : [40, 60, 100], .9));
+  ctx.fillStyle = rgb(mulc(t.doorCol || [40, 60, 100], .9));
   ctx.beginPath(); ctx.moveTo(tl[0], tl[1]); ctx.lineTo(tl[0] + lw * .35, tl[1] - (br[1] - tl[1]) * .02 * open); ctx.lineTo(tl[0] + lw * .35, br[1] + 2); ctx.lineTo(tl[0], br[1]); ctx.closePath(); ctx.fill();
 }
 

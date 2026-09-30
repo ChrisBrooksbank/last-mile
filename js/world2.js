@@ -140,7 +140,7 @@ function updateRider(dt) {
   if (lead && !R.pass && !R.filter) { const gn = lead.z - lead.len / 2 - R.z - .9; if (gn < .25) { R.z = lead.z - lead.len / 2 - 1.15; R.v = Math.min(R.v, Math.max(0, lead.v)); } }
   R.x += (R.tx - R.x) * (1 - Math.exp(-dt * 1.7));
   if (R.parkZ != null && !R.parked && R.v < .05 && R.parkZ - R.z < 1.2 && Math.abs(R.x - R.parkX) < .3) { R.parked = true; R.v = 0; nav.arrived = true; }
-  R.ind = (nxt && nxt.turn !== 'S' && S.len - R.z < 70 && R.parkZ == null) ? (nxt.turn === 'L' ? -1 : 1) : (R.parkZ != null && !R.parked && R.parkZ - R.z < 40 ? S.dest.side : (R.pass ? 1 : 0));
+  R.ind = (nxt && nxt.turn !== 'S' && S.len - R.z < 70 && R.parkZ == null) ? (nxt.turn === 'L' ? -1 : 1) : (R.parkZ != null && !R.parked && R.parkZ - R.z < 40 ? (S.dest ? S.dest.side : Math.sign(R.parkX)) : (R.pass ? 1 : 0));
 }
 
 // ---------- the swing round a corner ----------

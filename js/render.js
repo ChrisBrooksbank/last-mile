@@ -261,11 +261,41 @@ function drawLot(S, l, dmin) {
 function drawFurn(S, f) {
   switch (f.k) {
     case 'lamp': drawLamp(f); break;
-    case 'tree': {
-      box(f.x - .12, f.x + .12, 0, 2.6, f.z - .12, f.z + .12, [70, 54, 40]);
-      const p = Pw(f.x, 4.4 * f.sz, f.z); if (!p) break; const rz = p[2], r = F / rz * 2.2 * f.sz;
-      const leaf = f.hue < .5 ? [72, 112, 50] : f.hue < .8 ? [138, 142, 48] : [190, 122, 42];
-      for (let i = 0; i < 6; i++) { ctx.fillStyle = shade(leaf, rz, .7 + (i % 3) * .12); ctx.beginPath(); ctx.ellipse(p[0] + (i - 2.5) * r * .22, p[1] + (i % 2 ? 1 : -1) * r * .2 + (i % 3) * r * .05, r * .5, r * .42, 0, 0, TAU); ctx.fill(); }
+    case 'tree': drawTree(f); break;
+    case 'rack': {
+      for (const k of [-1, 0, 1]) { const zz = f.z + k * .9; box(f.x - .025, f.x + .025, 0, .85, zz - .38, zz - .34, [176, 178, 182]); box(f.x - .025, f.x + .025, 0, .85, zz + .34, zz + .38, [176, 178, 182]); box(f.x - .025, f.x + .025, .82, .88, zz - .38, zz + .38, [176, 178, 182]); }
+      if (f.bike) { box(f.x - .03, f.x + .03, .0, .68, f.z - .85, f.z - .79, [20, 20, 24]); box(f.x - .03, f.x + .03, .0, .68, f.z - .1, f.z - .04, [20, 20, 24]); box(f.x - .025, f.x + .025, .62, .7, f.z - .85, f.z - .04, [150, 30, 30]); box(f.x - .025, f.x + .025, .7, .95, f.z - .55, f.z - .5, [150, 30, 30]); box(f.x - .05, f.x + .05, .95, .99, f.z - .6, f.z - .42, [16, 16, 18]); box(f.x - .16, f.x + .16, .98, 1.02, f.z - .1, f.z - .05, [16, 16, 18]); }
+      break;
+    }
+    case 'aboard': { const b = box(f.x - .3, f.x + .3, 0, .9, f.z - .03, f.z + .03, [28, 30, 34]); if (b && (b.fxs || b.fzs)) { const dm = b.dm; for (let k = 0; k < 4; k++) if (b.fxs) fr('x', b.fxs < 0 ? f.x - .3 : f.x + .3, f.z - .22, f.z + .22 - k * .05, .62 - k * .12, .66 - k * .12, shade([220, 220, 216], dm, .9)); if (b.fzs) for (let k = 0; k < 4; k++) fr('z', b.fzs < 0 ? f.z - .03 : f.z + .03, f.x - .22, f.x + .22 - k * .05, .62 - k * .12, .66 - k * .12, shade([220, 220, 216], dm, .9)); } break; }
+    case 'cafe': {
+      const par = f.par || [200, 60, 50];
+      box(f.x - .02, f.x + .02, 0, 2.3, f.z - .02, f.z + .02, [60, 60, 64]);
+      box(f.x - .3, f.x + .3, .7, .74, f.z - .3, f.z + .3, [40, 44, 48]); box(f.x - .02, f.x + .02, 0, .7, f.z - .02, f.z + .02, [50, 52, 56]);
+      for (const sd of [-1, 1]) { box(f.x + sd * .55 - .2, f.x + sd * .55 + .2, .42, .46, f.z - .2, f.z + .2, [70, 50, 34]); box(f.x + sd * (sd > 0 ? .72 : .38) - .2 * 0 - .02, f.x + sd * (sd > 0 ? .72 : .38) + .02, .46, .85, f.z - .18, f.z + .18, [70, 50, 34]); }
+      const pts = []; for (let k = 0; k < 8; k++) { const an = k / 8 * TAU; pts.push(f.x + Math.cos(an) * 1.25, 2.28, f.z + Math.sin(an) * 1.25); } toCam(f.x, f.z); poly(shade(par, Math.max(_rz, 1), 1), pts);
+      const pt2 = []; for (let k = 0; k < 8; k++) { const an = k / 8 * TAU; pt2.push(f.x + Math.cos(an) * .5, 2.42, f.z + Math.sin(an) * .5); } poly(shade(mulc(par, 1.15), Math.max(_rz, 1), 1), pt2);
+      break;
+    }
+    case 'cabinet': { const b = box(f.x - .6, f.x + .6, 0, 1.3, f.z - .22, f.z + .22, [44, 92, 62]); if (b && b.fzs) { const pl = b.fzs < 0 ? f.z - .22 : f.z + .22; fr('z', pl, f.x - .02, f.x + .02, .05, 1.25, shade([20, 44, 30], b.dm)); fr('z', pl, f.x - .5, f.x - .35, .95, 1.05, shade([220, 220, 216], b.dm, .8)); } break; }
+    case 'meter': { box(f.x - .03, f.x + .03, 0, 1.2, f.z - .03, f.z + .03, [50, 54, 58]); const b = box(f.x - .16, f.x + .16, 1.1, 1.62, f.z - .1, f.z + .1, [26, 36, 60]); if (b && b.fzs) fr('z', b.fzs < 0 ? f.z - .1 : f.z + .1, f.x - .1, f.x + .1, 1.36, 1.5, emit([140, 240, 220], b.dm, .3 + .6 * env.night)); break; }
+    case 'speed': { box(f.x - .03, f.x + .03, 0, 2.5, f.z - .03, f.z + .03, [110, 112, 116]); const p = Pw(f.x, 2.55, f.z); if (p) { const rr = Math.max(2, F / p[2] * .32); ctx.fillStyle = shade([232, 232, 232], p[2]); ctx.beginPath(); ctx.arc(p[0], p[1], rr, 0, TAU); ctx.fill(); ctx.strokeStyle = shade([200, 30, 30], p[2]); ctx.lineWidth = Math.max(1, rr * .22); ctx.stroke(); if (rr > 6) { ctx.fillStyle = shade([20, 20, 20], p[2]); ctx.font = '700 ' + Math.round(rr * 1.05) + 'px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('20', p[0], p[1] + 1); } } break; }
+    case 'cones': {
+      for (let k = 0; k < 4; k++) { const zz = f.z - 3 + k * 2; box(f.x - .16, f.x + .16, 0, .05, zz - .16, zz + .16, [30, 30, 30]); const b = box(f.x - .11, f.x + .11, .05, .72, zz - .11, zz + .11, [255, 112, 22]); if (b && b.fzs) fr('z', b.fzs < 0 ? zz - .11 : zz + .11, f.x - .09, f.x + .09, .4, .5, shade([240, 240, 240], b.dm)); }
+      box(f.x - .03, f.x + .03, .0, 1.0, f.z + 3.4, f.z + 3.46, [90, 90, 92]); box(f.x - .03, f.x + .03, .0, 1.0, f.z + 5.4, f.z + 5.46, [90, 90, 92]);
+      for (let k = 0; k < 6; k++) box(f.x - .025, f.x + .025, .75, .95, f.z + 3.4 + k * .34, f.z + 3.74 + k * .34 - .02, k % 2 ? [230, 30, 30] : [240, 240, 240]);
+      const lp = Pw(f.x, 1.05, f.z + 3.43); if (lp) { const on = Math.floor(world.time * 2) % 2 === 0; ctx.fillStyle = on ? emit([255, 180, 40], lp[2], 1) : shade([90, 70, 20], lp[2]); ctx.fillRect(lp[0] - 2, lp[1] - 2, 4 * Math.max(1, F / lp[2] * .05), 4 * Math.max(1, F / lp[2] * .05)); if (on) glow(lp[0], lp[1], Math.max(6, F / lp[2] * 1.1), [255, 170, 40], .9 * (.4 + env.night)); }
+      break;
+    }
+    case 'belisha': {
+      for (let k = 0; k < 6; k++) box(f.x - .045, f.x + .045, k * .4, (k + 1) * .4, f.z - .045, f.z + .045, k % 2 ? [20, 20, 22] : [236, 236, 232]);
+      const p = Pw(f.x, 2.62, f.z); if (p) { const rr = Math.max(2, F / p[2] * .22), on = env.night > .3 ? (Math.floor(world.time * 1.6) % 2 === 0) : true; ctx.fillStyle = on ? emit([255, 150, 20], p[2], 1) : shade([120, 70, 10], p[2]); ctx.beginPath(); ctx.arc(p[0], p[1], rr, 0, TAU); ctx.fill(); if (on) glow(p[0], p[1], rr * 3, [255, 160, 40], .5 * (.3 + env.night)); }
+      break;
+    }
+    case 'rail': {
+      const n = Math.floor(f.len / 1.6);
+      for (let k = 0; k <= n; k++) box(f.x - .025, f.x + .025, 0, 1.05, f.z + k * 1.6 - .025, f.z + k * 1.6 + .025, [30, 34, 38]);
+      box(f.x - .02, f.x + .02, .95, .99, f.z, f.z + n * 1.6, [30, 34, 38]); box(f.x - .02, f.x + .02, .45, .49, f.z, f.z + n * 1.6, [30, 34, 38]);
       break;
     }
     case 'bin': box(f.x - .28, f.x + .28, 0, 1.0, f.z - .28, f.z + .28, [46, 64, 50]); break;
@@ -298,12 +328,57 @@ function drawSignal(S) {
   }
 }
 // ---------- ground ----------
+let LIGHT = null;   // indoor lighting override used by the tunnel scenes
+const ambRGB = () => LIGHT ? LIGHT.amb : [env.amb * env.tint[0], env.amb * env.tint[1], env.amb * env.tint[2]];
+const fogNow = z => LIGHT ? LIGHT.fog(z) : fogAmt(z);
+const fogColNow = () => LIGHT ? LIGHT.fogC : env.fogC;
+// Fill a ground polygon (local coords, constant height) with a tiling texture mapped in perspective, band by band.
+function texGround(a, kind, maxRz) {
+  const m = clipProject(a); if (m < 3) return;
+  const yg = a[1], hh = cam.h - yg; if (hh <= 0) return;
+  let ymin = 1e9, ymax = -1e9;
+  const xs = [], ys = [];
+  for (let i = 0; i < m; i++) { xs.push(ox_[i]); ys.push(oy_[i]); if (oy_[i] < ymin) ymin = oy_[i]; if (oy_[i] > ymax) ymax = oy_[i]; }
+  const yFar = HZ + hh * F / (maxRz || 60);
+  ymin = Math.max(ymin, yFar, HZ + 1); ymax = Math.min(ymax, SH); if (ymax <= ymin) return;
+  ctx.save(); ctx.beginPath(); ctx.moveTo(xs[0], ys[0]); for (let i = 1; i < m; i++) ctx.lineTo(xs[i], ys[i]); ctx.closePath(); ctx.clip();
+  const fa = FR.a, fb = FR.b, fc = FR.c, fd = FR.d, ftx = FR.tx, ftz = FR.tz, cs = cam.cs, sn = cam.sn;
+  const toLocal = (sx, rz) => { const rx = (sx - CXs - cam.yawPx) * rz / F, dx = rx * cs + rz * sn, dz = -rx * sn + rz * cs, X = cam.x + dx - ftx, Z = cam.z + dz - ftz; return [fa * X + fc * Z, fb * X + fd * Z]; };
+  const step = 2;
+  for (let y = ymin; y < ymax; y += step) {
+    const yc = y + step / 2, rz = hh * F / (yc - HZ);
+    const L0 = toLocal(0, rz), L1 = toLocal(SW, rz), ex = L1[0] - L0[0], ez = L1[1] - L0[1], L = Math.hypot(ex, ez) || 1e-6, dx = ex / L, dz = ez / L, nx = -dz, nz = dx;
+    const cxm = (L0[0] + L1[0]) / 2, czm = (L0[1] + L1[1]) / 2;
+    toCam(cxm + nx * .5, czm + nz * .5); if (_rz < NEAR) continue; const dY = (HZ + hh * F / _rz - yc) / .5;
+    const tpp = (L / SW) * ((GPAT[kind] && GPAT[kind].ppm) || 64), lv = clamp(Math.floor(Math.log2(Math.max(tpp, 1)) + .3), 0, 3);
+    const gp = groundPattern(kind, lv), k = SW / L, ppm = gp.ppm;
+    gp.pat.setTransform(new DOMMatrix([k * dx / ppm, dY * nx / ppm, k * dz / ppm, dY * nz / ppm, -k * (dx * L0[0] + dz * L0[1]), yc - dY * (nx * L0[0] + nz * L0[1])]));
+    ctx.fillStyle = gp.pat; ctx.fillRect(0, y, SW, step + .6);
+  }
+  // ambient light, then distance fog, only over the textured part
+  const A3 = ambRGB(), ac = 'rgb(' + (clamp(A3[0], 0, 1) * 255 | 0) + ',' + (clamp(A3[1], 0, 1) * 255 | 0) + ',' + (clamp(A3[2], 0, 1) * 255 | 0) + ')';
+  if (A3[0] < .985) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = ac; ctx.fillRect(0, ymin, SW, ymax - ymin); ctx.globalCompositeOperation = 'source-over'; }
+  const gf = ctx.createLinearGradient(0, ymin, 0, ymax), span = Math.max(1, ymax - ymin);
+  for (const z of [(maxRz || 60), 40, 25, 15, 8, 4, 2]) { const yy = HZ + hh * F / z; const t = (yy - ymin) / span; if (t >= 0 && t <= 1) gf.addColorStop(t, rgba(fogColNow(), fogNow(z))); }
+  gf.addColorStop(0, rgba(fogColNow(), fogNow(maxRz || 60))); gf.addColorStop(1, rgba(fogColNow(), fogNow(2)));
+  ctx.fillStyle = gf; ctx.fillRect(0, ymin, SW, ymax - ymin);
+  ctx.restore();
+}
+
 function drawGround(S, cull) {
   const hw = S.halfW, pav = S.pav, zc = camL.z, zlo = Math.max(-14, zc - 60), zhi = Math.min(cull, zc + FARZ + 20);
   const pc = groundGrad([148, 146, 140]), rc = groundGrad([62, 63, 68]), kc = groundGrad([180, 178, 172]);
   const zp0 = Math.max(10, zlo);
   for (const sd of [-1, 1]) { strip(sd * hw, sd * (hw + pav), .12, pc, zp0, zhi); strip(sd < 0 ? -hw - .18 : hw, sd < 0 ? -hw : hw + .18, .125, kc, zp0, zhi); }
   strip(-hw, hw, 0, rc, zlo, zhi);
+  texGround([-hw, 0, zlo, hw, 0, zlo, hw, 0, zhi, -hw, 0, zhi], 'asphalt', 58);
+  for (const sd of [-1, 1]) texGround([sd * hw, .12, zp0, sd * (hw + pav), .12, zp0, sd * (hw + pav), .12, zhi, sd * hw, .12, zhi], 'slabs', 52);
+  // kerb face, gutter and tyre wear
+  for (const sd of [-1, 1]) {
+    poly(shade([176, 174, 168], 12, .92), [sd * hw, 0, zp0, sd * hw, .12, zp0, sd * hw, .12, zhi, sd * hw, 0, zhi]);
+    strip(sd * (hw - .55), sd * hw, .004, 'rgba(10,10,12,.22)', zp0, zhi);
+  }
+  for (const lx of [laneX(S), -laneX(S)]) for (const o of [-.72, .72]) strip(lx + o - .17, lx + o + .17, .003, 'rgba(12,12,14,.11)', zlo, Math.min(zhi, S.len - 6));
   for (const p of S.patches) {
     if (p.z > zhi || p.z + p.l < zlo || Math.abs(p.z - zc) > 100) continue;
     poly(shade([54 * p.s, 55 * p.s, 60 * p.s], Math.abs(p.z - zc) + 4), [p.x, .004, p.z, p.x + p.w, .004, p.z, p.x + p.w, .004, p.z + p.l, p.x, .004, p.z + p.l]);
@@ -317,11 +392,31 @@ function drawGround(S, cull) {
   if (S.yellow) { const yc = groundGrad([206, 176, 40]); for (const sd of [-1, 1]) { strip(sd * (hw - .4), sd * (hw - .32), .006, yc, zp0, Math.min(zhi, S.len - 6)); strip(sd * (hw - .24), sd * (hw - .16), .006, yc, zp0, Math.min(zhi, S.len - 6)); } }
   for (const zz of S.zebras) for (let x = -hw + .3; x < hw - .3; x += 1.0) { toCam(x, zz); if (_rz < -5 || _rz > 100) continue; poly(white(Math.max(_rz, 1)), [x, .007, zz, x + .5, .007, zz, x + .5, .007, zz + 3.2, x, .007, zz + 3.2]); }
   if (S.signal) poly(white(Math.max(1, S.stopZ - zc)), [-hw, .007, S.stopZ, 0, .007, S.stopZ, 0, .007, S.stopZ + .3, -hw, .007, S.stopZ + .3]);
-  ctx.strokeStyle = shade([120, 118, 112], 12); ctx.lineWidth = 1; ctx.beginPath();
-  for (let z = Math.ceil(Math.max(zp0, zc - 6) / 1.4) * 1.4; z < zc + 30; z += 1.4) for (const sd of [-1, 1]) {
-    const a = Pw(sd * hw, .12, z), b = Pw(sd * (hw + pav), .12, z); if (a && b) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); }
+  // drains, manholes, box-junction hatching, autumn leaves and puddles
+  for (const dr of S.drains) { if (dr.z < zc - 5 || dr.z > zc + 60) continue; toCam(dr.x, dr.z); const dm = Math.max(_rz, 1); poly(shade([26, 26, 30], dm), [dr.x - .25, .006, dr.z - .4, dr.x + .25, .006, dr.z - .4, dr.x + .25, .006, dr.z + .4, dr.x - .25, .006, dr.z + .4]); for (let k = -1; k <= 1; k++) poly(shade([80, 82, 86], dm), [dr.x - .22, .008, dr.z + k * .2 - .02, dr.x + .22, .008, dr.z + k * .2 - .02, dr.x + .22, .008, dr.z + k * .2 + .02, dr.x - .22, .008, dr.z + k * .2 + .02]); }
+  for (const mh of S.manholes) {
+    if (mh.z < zc - 5 || mh.z > zc + 70) continue; toCam(mh.x, mh.z); const dm = Math.max(_rz, 1), pts = [], pts2 = [];
+    for (let k = 0; k < 10; k++) { const an = k / 10 * TAU; pts.push(mh.x + Math.cos(an) * .36, .006, mh.z + Math.sin(an) * .36); pts2.push(mh.x + Math.cos(an) * .3, .007, mh.z + Math.sin(an) * .3); }
+    poly(shade([44, 46, 50], dm), pts); poly(shade([70, 72, 76], dm), pts2);
+    for (let k = -2; k <= 2; k++) poly(shade([40, 42, 46], dm), [mh.x - .28, .008, mh.z + k * .1 - .012, mh.x + .28, .008, mh.z + k * .1 - .012, mh.x + .28, .008, mh.z + k * .1 + .012, mh.x - .28, .008, mh.z + k * .1 + .012]);
   }
-  ctx.stroke();
+  if (S.signal) { // yellow box junction
+    const b0 = S.len - 3, b1 = S.len + 11, yel = shade([214, 182, 40], Math.max(1, Math.abs(b0 - zc)), .95);
+    for (let t = -2 * hw * .6; t < b1 - b0; t += 1.3) {
+      const xs = -hw + Math.max(0, -t / .6), xe = -hw + Math.min(2 * hw, (b1 - b0 - t) / .6); if (xe <= xs) continue;
+      const za = b0 + t + .6 * (xs + hw), zb = b0 + t + .6 * (xe + hw);
+      if (Math.max(za, zb) < zc - 3 || Math.min(za, zb) > zc + 70) continue;
+      poly(yel, [xs, .007, za - .06, xe, .007, zb - .06, xe, .007, zb + .06, xs, .007, za + .06]);
+    }
+    strip(-hw, hw, .007, yel, b0, b0 + .12); strip(-hw, hw, .007, yel, b1 - .12, b1);
+  }
+  if (S.leaves) for (const lf of S.leaves) { if (lf.z < zc - 4 || lf.z > zc + 34) continue; const cl = lf.c, sz = lf.s, ca = Math.cos(lf.a) * sz, sa = Math.sin(lf.a) * sz; toCam(lf.x, lf.z); poly(shade(cl, Math.max(_rz, 1), .9), [lf.x - ca, lf.y, lf.z - sa, lf.x - sa * .5, lf.y, lf.z + ca * .5, lf.x + ca, lf.y, lf.z + sa, lf.x + sa * .5, lf.y, lf.z - ca * .5]); }
+  if (env.wet > .3 && S.puddles) for (const pd of S.puddles) {
+    if (pd.z < zc - 4 || pd.z > zc + 55) continue; const pts = []; toCam(pd.x, pd.z); const dm = Math.max(_rz, 1);
+    for (let k = 0; k < 12; k++) { const an = k / 12 * TAU; pts.push(pd.x + Math.cos(an) * pd.rx, pd.y + .003, pd.z + Math.sin(an) * pd.rz); }
+    poly(rgba(mixc(env.skyBot, [70, 76, 90], .35), .5 * Math.min(1, env.wet) * (1 - fogAmt(dm))), pts);
+    if (env.rain > .2) { const rp = ((world.time * .8 + pd.x * 3) % 1); const pp = []; for (let k = 0; k < 12; k++) { const an = k / 12 * TAU; pp.push(pd.x + Math.cos(an) * pd.rx * rp, pd.y + .004, pd.z + Math.sin(an) * pd.rz * rp); } poly('rgba(255,255,255,' + (0.10 * (1 - rp)).toFixed(3) + ')', pp); }
+  }
   for (const sd of [-1, 1]) for (const g of S.gaps[sd < 0 ? 'L' : 'R']) {
     if (g.z1 < zlo || g.z0 > zhi) continue;
     if (g === S.jg && S.turnSide === sd) continue;

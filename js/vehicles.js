@@ -191,7 +191,7 @@ function mipOf(img, lv) {
 
 // ---- slicing a vertical textured quad, with ambient + fog applied only to opaque pixels
 let SCR = null, SCRg = null;
-function drawSlicedQuad(img, ax, az, bx, bz, y0, y1, faceK) {
+function drawSlicedQuad(img, ax, az, bx, bz, y0, y1, faceK, emi, emiA) {
   toCam(ax, az); const cax = _rx, caz = _rz; toCam(bx, bz); const cbx = _rx, cbz = _rz;
   const dz = cbz - caz, dx = cbx - cax;
   if (caz < NEAR && cbz < NEAR) return;
@@ -211,18 +211,25 @@ function drawSlicedQuad(img, ax, az, bx, bz, y0, y1, faceK) {
   const g = SCRg; g.setTransform(DPR, 0, 0, DPR, 0, 0); g.globalCompositeOperation = 'source-over'; g.clearRect(bx0, bt, bx1 - bx0, bb - bt);
   const step = wpx > 360 ? 3 : wpx > 90 ? 2 : 1;
   const tOf = sx => { const s = (sx - CXs - cam.yawPx) / F; let d = s * dz - dx; if (Math.abs(d) < 1e-9) d = 1e-9; const t = (cax - s * caz) / d; return t < tlo ? tlo : t > thi ? thi : t; };
-  const ex = Math.min(SW, Math.ceil(xmax));
+  const ex = Math.min(SW, Math.ceil(xmax)), cols = [];
   for (let sx = Math.max(0, Math.floor(xmin)); sx < ex; sx += step) {
     const t0 = tOf(sx), t1 = tOf(sx + step), tm = (t0 + t1) / 2, rz = caz + tm * dz; if (rz < NEAR) continue;
     const yT = HZ + (cam.h - y1) * F / rz, yB = HZ + (cam.h - y0) * F / rz;
     let u0 = t0, u1 = t1; if (u0 > u1) { const q = u0; u0 = u1; u1 = q; }
     const sw = Math.max(1, (u1 - u0) * iw);
     g.drawImage(src, Math.min(u0 * iw, iw - sw), 0, sw, ih, sx, yT, step + .5, yB - yT);
+    cols.push(sx, yT, yB, u0, u1);
   }
-  const a = clamp(env.amb * faceK, 0, 1);
+  const amb = LIGHT ? LIGHT.amb[0] : env.amb, a = clamp(amb * faceK, 0, 1), nt = LIGHT ? 0 : env.night;
   g.globalCompositeOperation = 'source-atop';
-  if (a < .98) { g.fillStyle = 'rgba(' + (env.night * 6 | 0) + ',' + (env.night * 10 | 0) + ',' + (env.night * 26 | 0) + ',' + (1 - a).toFixed(3) + ')'; g.fillRect(bx0, bt, bx1 - bx0, bb - bt); }
-  const fg = fogAmt(Math.max(1, (rmin + rmax) / 2)); if (fg > .01) { g.fillStyle = rgba(env.fogC, fg); g.fillRect(bx0, bt, bx1 - bx0, bb - bt); }
+  if (a < .98) { g.fillStyle = 'rgba(' + (nt * 6 | 0) + ',' + (nt * 10 | 0) + ',' + (nt * 26 | 0) + ',' + (1 - a).toFixed(3) + ')'; g.fillRect(bx0, bt, bx1 - bx0, bb - bt); }
+  if (emi && emiA > .03) {
+    g.globalCompositeOperation = 'source-over'; g.globalAlpha = Math.min(1, emiA);
+    const ew = emi.width, eh2 = emi.height;
+    for (let i = 0; i < cols.length; i += 5) { const sw2 = Math.max(1, (cols[i + 4] - cols[i + 3]) * ew); g.drawImage(emi, Math.min(cols[i + 3] * ew, ew - sw2), 0, sw2, eh2, cols[i], cols[i + 1], step + .5, cols[i + 2] - cols[i + 1]); }
+    g.globalAlpha = 1; g.globalCompositeOperation = 'source-atop';
+  }
+  const fg = fogNow(Math.max(1, (rmin + rmax) / 2)); if (fg > .01) { g.fillStyle = rgba(fogColNow(), fg); g.fillRect(bx0, bt, bx1 - bx0, bb - bt); }
   ctx.drawImage(SCR, bx0 * DPR, bt * DPR, (bx1 - bx0) * DPR, (bb - bt) * DPR, bx0, bt, bx1 - bx0, bb - bt);
 }
 

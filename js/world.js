@@ -80,12 +80,30 @@ function makeStreet(plan) {
     else if (q < D.tree + .24) S.furn.push({ k: 'bus', z, x: side * (halfW + .8), side });
     else if (q < D.tree + .32) S.furn.push({ k: 'bollard', z, x: side * (halfW + .3), side });
   }
+  // richer furniture
+  for (const zc of S.zebras) for (const sd of [-1, 1]) S.furn.push({ k: 'belisha', z: zc + .3, x: sd * (halfW + .55), side: sd });
+  if (S.signal) for (const sd of [-1, 1]) S.furn.push({ k: 'rail', z: S.stopZ - 9, len: 8, x: sd * (halfW + .45), side: sd });
+  S.furn.push({ k: 'speed', z: 16, x: -(halfW + .6), side: -1 });
+  for (let z = 20 + r.r(0, 10); z < S.len + 150; z += r.r(14, 24)) {
+    const side = r.c(.5) ? 1 : -1; if (inGap(side, z)) continue; const q = r.n();
+    if (D.shop > .4 && q < .2) S.furn.push({ k: 'aboard', z, x: side * (halfW + S.pav - .7), side });
+    else if (D.shop > .3 && q < .3) S.furn.push({ k: 'cafe', z, x: side * (halfW + S.pav * .6), side, par: r.p([[200, 60, 50], [230, 220, 190], [50, 90, 140], [60, 120, 70]]) });
+    else if (q < .4) S.furn.push({ k: 'rack', z, x: side * (halfW + .7), side, bike: r.c(.7) });
+    else if (q < .44) S.furn.push({ k: 'cabinet', z, x: side * (halfW + S.pav - .45), side });
+    else if (q < .48 && D.shop > .3) S.furn.push({ k: 'meter', z, x: side * (halfW + .55), side });
+    else if (q < .5) S.furn.push({ k: 'cones', z, x: side * (halfW - 1.0), side });
+  }
+  S.drains = []; S.manholes = []; S.leaves = []; S.puddles = [];
+  for (let z = 12 + r.r(0, 10); z < S.len + 120; z += 22) for (const sd of [-1, 1]) if (!inGap(sd, z)) S.drains.push({ x: sd * (halfW - .3), z });
+  for (let z = 16 + r.r(0, 20); z < S.len + 110; z += r.r(26, 46)) S.manholes.push({ x: r.p([laneX(S), -laneX(S), 0]) + r.r(-.4, .4), z });
+  for (let i = 0; i < 90; i++) { const sd = r.c(.5) ? 1 : -1, onRoad = r.c(.3); S.leaves.push({ x: sd * (onRoad ? halfW - r.r(0, .9) : halfW + r.r(.1, S.pav * .95)), y: onRoad ? .006 : .13, z: r.r(10, S.len + 120), c: r.p([[176, 104, 34], [142, 86, 30], [196, 150, 40], [110, 74, 30], [150, 60, 30]]), s: r.r(.06, .13), a: r.n() * 3 }); }
+  for (let i = 0; i < 14; i++) { const sd = r.c(.5) ? 1 : -1, onRoad = r.c(.6); S.puddles.push({ x: sd * (onRoad ? halfW - r.r(.5, 1.3) : halfW + r.r(.4, S.pav * .8)), y: onRoad ? 0 : .12, z: r.r(14, S.len + 100), rx: r.r(.5, 1.4), rz: r.r(.8, 2.6) }); }
   // parked cars
   for (const side of [-1, 1]) {
     const pr = (halfW >= Math.abs(laneX(S)) + 2.9) ? (side < 0 ? D.parked : D.parked * .55) : 0; let z = r.r(10, 14);
     while (z < S.len + 150) {
       const type = r.c(.14) ? 'van' : 'car', len = type === 'van' ? 5.2 : r.r(3.9, 4.6);
-      const ok = !inGap(side, z - 1) && !inGap(side, z + len + 1) && !(S.dest && S.dest.side === side && (z + len + 1 > S.dest.parkZ - 11 && z - 1 < S.dest.parkZ + 9)) && !S.furn.some(f => f.k === 'bus' && f.side === side && Math.abs(f.z - z) < 7);
+      const ok = !inGap(side, z - 1) && !inGap(side, z + len + 1) && !(S.dest && S.dest.side === side && (z + len + 1 > S.dest.parkZ - 11 && z - 1 < S.dest.parkZ + 9)) && !S.furn.some(f => (f.k === 'bus' && f.side === side && Math.abs(f.z - z) < 7) || (f.k === 'cones' && f.side === side && z + len + 1 > f.z - 4 && z - 1 < f.z + 7));
       if (r.c(pr) && ok) S.parked.push({ z: z + len / 2, x: side * (halfW - .95), len, w: 1.8, h: type === 'van' ? 2.3 : 1.42, type, col: type === 'van' ? r.p([[220, 220, 224], [190, 190, 194], [40, 60, 100]]) : r.p(CAR_COLS), side });
       z += len + r.r(.5, 3);
     }
