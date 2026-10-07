@@ -31,7 +31,9 @@ function hash(a, b, c) {
 }
 const QP = new URLSearchParams(location.search);
 const G = new RNG((Date.now() ^ (Math.random() * 1e9)) >>> 0); // story RNG
-const CLOCK = +(QP.get('clock') || 6); // sim seconds per real second
+// numeric URL param, falling back to `def` when missing or not a usable number
+const qNum = (k, def, lo, hi) => { const v = parseFloat(QP.get(k)); return isFinite(v) ? clamp(v, lo, hi) : def; };
+const CLOCK = qNum('clock', 6, 0, 3600); // sim seconds per real second
 
 // ---------- weather & daylight ----------
 const WX = {
@@ -48,12 +50,14 @@ const WX_NEXT = {
   rain: ['drizzle', 'overcast'], fog: ['overcast', 'cloudy'],
 };
 const env = {
-  hour: QP.has('t') ? +QP.get('t') : G.r(11, 18.5),
-  wx: QP.get('w') || G.p(['clear', 'clear', 'cloudy', 'overcast', 'drizzle']),
+  hour: ((qNum('t', G.r(11, 18.5), -1e6, 1e6) % 24) + 24) % 24,
+  wx: G.p(['clear', 'clear', 'cloudy', 'overcast', 'drizzle']),
   cloud: 0, rain: 0, fog: .004, wet: 0,
   day: 1, night: 0, amb: 1, tint: [1, 1, 1], twi: 0, lamp: 0, winLit: 0,
   skyTop: [90, 150, 220], skyBot: [190, 210, 235], fogC: [190, 205, 220],
 };
+const WX_FIXED = Object.prototype.hasOwnProperty.call(WX, QP.get('w')) ? QP.get('w') : null; // ?w= pins the weather (ignored if unknown)
+if (WX_FIXED) env.wx = WX_FIXED;
 { const T = WX[env.wx]; env.cloud = T.cloud; env.rain = T.rain; env.fog = T.fog; env.wet = T.rain > 0 ? 1 : 0; }
 let wxTimer = G.r(240, 520);
 function updateEnv(dt) {
@@ -65,7 +69,7 @@ function updateEnv(dt) {
   env.fog += (T.fog - env.fog) * k;
   env.wet += ((env.rain > .1 ? 1 : 0) - env.wet) * dt * (env.rain > .1 ? .15 : .006);
   wxTimer -= dt;
-  if (wxTimer <= 0 && !QP.has('w')) { wxTimer = G.r(260, 620); env.wx = G.p(WX_NEXT[env.wx]); }
+  if (wxTimer <= 0 && !WX_FIXED) { wxTimer = G.r(260, 620); env.wx = G.p(WX_NEXT[env.wx]); }
   const elev = Math.sin(Math.PI * (env.hour - 6.7) / 11.6);
   const day = sstep(-0.10, 0.25, elev);
   env.day = day; env.night = 1 - day;

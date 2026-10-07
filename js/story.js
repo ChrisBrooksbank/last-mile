@@ -58,6 +58,7 @@ function busyness() {
   const h = env.hour;
   return (h > 11.7 && h < 14.3) ? .8 : (h > 17.7 && h < 21.7) ? 1 : (h > 14.3 && h < 17.7) ? .35 : (h > 21.7 || h < 6) ? .3 : .5;
 }
+const DEST_TYPES = ['house', 'direct', 'flat', 'estate', 'tower'], OUTCOMES = ['ready', 'short', 'long', 'gone', 'stolen'];
 function makeOffer() {
   const cu = G.p(CUISINES), from = nav.district;
   const name = G.p(cu.names) + ' ' + G.p(cu.suffix);
@@ -66,14 +67,14 @@ function makeOffer() {
   const dropD = G.c(.3) ? G.p(NEIGH[from]) : from;
   nav.lastName = plans1[plans1.length - 1].name;
   const n2 = G.c(.1) ? G.i(6, 7) : G.i(3, 5), plans2 = planRoute(plans1[plans1.length - 1].district, n2, dropD);
-  const last2 = plans2[plans2.length - 1], dt = QP.get('dest') || G.p(DISTRICTS[last2.district].dest);
+  const last2 = plans2[plans2.length - 1], dt = DEST_TYPES.includes(QP.get('dest')) ? QP.get('dest') : G.p(DISTRICTS[last2.district].dest);
   const dest2 = setDest(last2, dt, {}); dest2.cust = mkCustomer(dest2, last2);
   const mi = (routeLength(plans1) + routeLength(plans2)) / 1609;
   const b = busyness(), wet = env.rain > .2 ? .6 : 0, surge = b > .9 ? .5 : 0;
   const pay = Math.round((2.5 + 1.05 * mi + wet + surge + G.r(-.35, .6)) * 20) / 20;
   const r = G.n(), bb = b;
   const outcome = r < .5 ? 'ready' : r < .5 + .25 ? 'short' : r < .75 + .08 + bb * .05 ? 'long' : r < .93 ? 'gone' : 'stolen';
-  const oc = QP.get('outcome') || outcome; const items = []; const pool = cu.items.slice(); for (let i = 0; i < G.i(2, 3); i++) { const it = pool.splice(G.i(0, pool.length - 1), 1)[0]; if (it) items.push((G.c(.3) ? '2× ' : '1× ') + it); }
+  const oc = OUTCOMES.includes(QP.get('outcome')) ? QP.get('outcome') : outcome; const items = []; const pool = cu.items.slice(); for (let i = 0; i < G.i(2, 3); i++) { const it = pool.splice(G.i(0, pool.length - 1), 1)[0]; if (it) items.push((G.c(.3) ? '2× ' : '1× ') + it); }
   return { cu, rest, name, plans1, plans2, dropD, cust: dest2.cust, mi, pay, outcome: oc, items, order: String(G.i(1000, 9999)), code: String(G.i(1000, 9999)), min: mi * 4.2 + 8, district: DISTRICTS[dropD].name, street: plans1[plans1.length - 1].name };
 }
 function* waitRiding(sec) { let t = 0; while (t < sec) { t += DT; yield 0; } }
@@ -503,10 +504,11 @@ function* merchSpot(bay) {
   scene.selfie = { t: 0, side: bay.side, hold: 0, holdT: 0, flav: 0, flavT: 0, code: 0, codeT: 0, talk: false };
   yield* fade(0, .5); Snd.click(); yield .5;
   const lines = G.p(MERCH_SCRIPTS);
+  const cm = lines.join(' ').match(/[Cc]ode ([A-Z][A-Z ]*[A-Z])/); scene.selfie.codeTxt = cm ? cm[1] : null; // the card shows the code he actually reads out
   scene.selfie.holdT = 1; scene.selfie.talk = true;
   for (let i = 0; i < lines.length; i++) {
     if (i === 1) scene.selfie.flavT = 1;
-    if (i === 2) scene.selfie.codeT = 1;
+    if (i === 2 && scene.selfie.codeTxt) scene.selfie.codeT = 1;
     yield* speak('You', lines[i], 118, false);
   }
   yield* speak('You', G.p(['Right, back to work!', 'Anyway. Orders to deliver.', 'Cheers. Now, where is that next order?']), 118, false);

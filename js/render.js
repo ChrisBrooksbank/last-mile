@@ -12,7 +12,7 @@ const scene = {
 function setHeading(th) { cam.th = th; cam.cs = Math.cos(th); cam.sn = Math.sin(th); if (Math.abs(cam.sn) < 1e-9) cam.sn = 0; if (Math.abs(cam.cs) < 1e-9) cam.cs = 0; }
 
 function resize() {
-  DPR = QP.has('dpr') ? +QP.get('dpr') : Math.min(window.devicePixelRatio || 1, 1.5);
+  DPR = qNum('dpr', Math.min(window.devicePixelRatio || 1, 1.5), .25, 4);
   SW = window.innerWidth; SH = window.innerHeight;
   cv.width = Math.round(SW * DPR); cv.height = Math.round(SH * DPR);
   F = Math.max(SW * 0.68, SH * 0.95); HZ0 = HZ = SH * 0.44; CXs = SW / 2;
