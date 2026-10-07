@@ -11,7 +11,11 @@ function phoneScreen(c, W, H) {
   const t = phone.t, m = phone.mode;
   c.fillStyle = '#11171d'; c.fillRect(0, 0, W, H);
   c.textBaseline = 'alphabetic';
-  const txt = (s, x, y, size, col, weight, align) => { c.font = (weight || 500) + ' ' + size + 'px system-ui,Segoe UI,Roboto,sans-serif'; c.fillStyle = col || '#fff'; c.textAlign = align || 'left'; c.fillText(s, x, y); };
+  const txt = (s, x, y, size, col, weight, align) => {
+    c.font = (weight || 500) + ' ' + size + 'px system-ui,Segoe UI,Roboto,sans-serif'; c.fillStyle = col || '#fff'; c.textAlign = align || 'left';
+    const room = align === 'right' ? x - 6 : align === 'center' ? Math.min(x, W - x) * 2 - 12 : W - x - 6; // squeeze long names to fit the screen
+    c.fillText(s, x, y, Math.max(10, room));
+  };
   // status bar
   txt(clockStr(), 10, 15, 10, '#9fb0bd', 600);
   c.fillStyle = '#9fb0bd'; rr(c, W - 28, 7, 18, 8, 2); c.fill(); c.fillStyle = '#11171d'; c.fillRect(W - 26, 9, 8, 4);

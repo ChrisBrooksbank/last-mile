@@ -213,6 +213,9 @@ function* doPickup(tr) {
   const S = () => world.street;
   phone.mode = 'nav'; phone.target = 'PICK UP'; phone.sub = tr.name; phone.sub2 = tr.cu.k + ' · ' + tr.street; phone.order = tr.order; phone.amount = tr.pay;
   nav.wander = false; nav.queue = tr.plans1.slice(); nav.arrived = false;
+  // the route was planned when the offer came in; if he has turned since, don't "turn onto" the street he's on
+  const q0 = nav.queue[0], cur = world.turn ? world.turn.plan.name : world.street.name;
+  if (q0 && nav.queue.length > 1 && q0.name === cur) for (let k = 0; k < 12 && (q0.name === cur || q0.name === nav.queue[1].name); k++) q0.name = streetName(q0.district, cur);
   phone.gt = 0;
   yield () => nav.arrived;
   // arrived at the restaurant street
@@ -477,7 +480,9 @@ function sayChain(lines, i, onEnd) {
 function canMerch() { return !merchActive && scene.rideActive && !world.turn && phone.mode === 'idle' && R.parkZ == null && world.street && !world.street.veh.some(u => u.emerg); }
 // a free stretch of kerb ahead where he can stop for the spot to camera
 function findBay() {
-  const S = world.street; if (!S || S.dest) return null;
+  // (a street with a finished drop on it is fine: canMerch() only lets this run between orders, and he is
+  // nearly always still on the street he delivered to when the phone goes idle)
+  const S = world.street; if (!S) return null;
   for (const side of [-1, 1]) for (let z = R.z + 40; z < Math.min(R.z + 110, S.len - 50); z += 2) {
     const a = z - 6, b = z + 3.5; let ok = true;
     for (const c of S.parked) if (c.side === side && c.z + c.len / 2 > a && c.z - c.len / 2 < b) { ok = false; break; }
