@@ -1,9 +1,11 @@
 'use strict';
 // The rider's shift: offers, decisions, pickups, deliveries — written as one long coroutine.
 let DT = 0.016;
+let shiftStarted = false; // set when the viewer presses Start
 const capEl = document.getElementById('cap'), capWho = document.getElementById('capWho'), capTxt = document.getElementById('capTxt');
 let capTimer = 0;
 function caption(who, text, dur, mute) {
+  capEl.classList.toggle('high', scene.mode === 'tunnel' && !!scene.door); // keep the subtitle off the face in the doorway
   capWho.textContent = (who || '').replace(/^Rider[MF]$/, 'Rider'); capTxt.textContent = text; capEl.classList.add('on'); capEl.classList.toggle('inner', !who);
   capTimer = dur;
 }
@@ -82,6 +84,8 @@ function* waitRiding(sec) { let t = 0; while (t < sec) { t += DT; yield 0; } }
 function* waitForOrder() {
   nav.wander = true; nav.arrived = false; phone.mode = 'idle'; phone.gt = 0; phone.tap = null;
   let declines = 0, first = trips === 0;
+  // he rides about behind the title card, but the first order waits until the shift is actually started (and audible)
+  while (!shiftStarted) yield 0;
   for (;;) {
     const b = busyness();
     yield* waitRiding(first ? 7 : G.r(9, 24) * (1.3 - b * .6)); first = false;

@@ -192,9 +192,18 @@ function beginTurn(plan) {
   world.turn = { S1, fr, s, P, len, u: 0, plan, zB, xB, th: 0 };
   R.pass = null; R.filter = false; R.ind = s;
 }
+// is anyone on foot in the next few metres of the swing? (people walk across the mouth of the side street)
+function pedInTurnPath(T) {
+  const u1 = Math.min(1, T.u + 5.5 / T.len), f = T.fr, pts = [];
+  for (let k = 0; k <= 6; k++) pts.push(bez(T.P, T.u + (u1 - T.u) * k / 6));
+  const hit = (x, z) => pts.some(q => Math.abs(q.x - x) < 1.05 && Math.abs(q.z - z) < 1.05);
+  for (const p of world.street.peds) if (hit(p.x, p.z)) return true;
+  for (const p of T.S1.peds) if (hit(f.a * p.x + f.b * p.z + f.tx, f.c * p.x + f.d * p.z + f.tz)) return true;
+  return false;
+}
 function updateTurn(dt) {
-  const T = world.turn, vt = T.s ? 5.4 : 7.5;
-  R.v += clamp(vt - R.v, -4 * dt, 2.5 * dt);
+  const T = world.turn, yieldPed = pedInTurnPath(T), vt = yieldPed ? 0 : T.s ? 5.4 : 7.5;
+  R.v = Math.max(0, R.v + clamp(vt - R.v, (yieldPed ? -7 : -4) * dt, 2.5 * dt)); R.braking = yieldPed && R.v > .05;
   T.u = Math.min(1, T.u + R.v * dt / T.len);
   const p = bez(T.P, T.u), d = bezD(T.P, T.u);
   R.x = p.x; R.z = p.z; T.th = Math.atan2(d.x, d.z); R.dist += R.v * dt;

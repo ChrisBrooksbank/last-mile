@@ -115,7 +115,7 @@ resize();
   mainGen = mainStory();
 }
 document.getElementById('go').addEventListener('click', () => {
-  Snd.start(); document.getElementById('intro').classList.add('gone');
+  Snd.start(); shiftStarted = true; document.getElementById('intro').classList.add('gone');
 });
 window.addEventListener('keydown', e => {
   if (e.key === 'm' || e.key === 'M') { Snd.start(); const m = Snd.toggleMute(); document.getElementById('mute').textContent = m ? 'Sound off' : 'Sound on'; }
