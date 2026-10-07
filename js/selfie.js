@@ -55,7 +55,7 @@ function renderSelfie(dt) {
     const cw = Math.min(SW * .42, 360), ch = SH * .11, cx2 = SW - m - cw - 6, cy2 = SH * .13 - (1 - s.code) * 30 + Math.sin(s.t * 3) * 2;
     ctx.globalAlpha = clamp(s.code * 1.5, 0, 1); ctx.save(); ctx.translate(cx2 + cw / 2, cy2 + ch / 2); ctx.rotate(-.04);
     ctx.fillStyle = '#f7c948'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-cw / 2, -ch / 2, cw, ch, 12) : ctx.rect(-cw / 2, -ch / 2, cw, ch); ctx.fill(); ctx.strokeStyle = '#7a4c00'; ctx.setLineDash([8, 6]); ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = '#4a2c00'; ctx.textAlign = 'center'; ctx.font = '700 ' + Math.round(ch * .2) + 'px system-ui,sans-serif'; ctx.fillText('USE CODE', 0, -ch * .24); ctx.font = '900 ' + Math.round(ch * .36) + 'px system-ui,sans-serif'; ctx.fillText('KICKING OFF', 0, ch * .14); ctx.font = '800 ' + Math.round(ch * .17) + 'px system-ui,sans-serif'; ctx.fillText('10% OFF', 0, ch * .38);
+    ctx.fillStyle = '#4a2c00'; ctx.textAlign = 'center'; ctx.font = '700 ' + Math.round(ch * .2) + 'px system-ui,sans-serif'; ctx.fillText('USE CODE', 0, -ch * .24); ctx.font = '900 ' + Math.round(ch * .36) + 'px system-ui,sans-serif'; ctx.fillText(s.codeTxt || '', 0, ch * .14); ctx.font = '800 ' + Math.round(ch * .17) + 'px system-ui,sans-serif'; ctx.fillText('10% OFF', 0, ch * .38);
     ctx.restore(); ctx.globalAlpha = 1;
   }
 }

@@ -6,7 +6,7 @@ function makeShop(cu, busy) {
   if (FAST_CUISINES.includes(cu.k)) venue = q < .6 ? 'fast' : q < .9 ? 'ghost' : 'sit';
   else if (cu.k === 'Pizza') venue = q < .35 ? 'fast' : q < .65 ? 'sit' : 'ghost';
   else venue = q < .15 ? 'fast' : q < .45 ? 'ghost' : 'sit';
-  if (QP.has('venue')) venue = QP.get('venue');
+  if (['fast', 'ghost', 'sit'].includes(QP.get('venue'))) venue = QP.get('venue');
   const look = () => {
     const l = randomLook(G, 'staff');
     if (venue === 'fast') { l.outfit = 'tee'; l.top = mixc(cu.col, [255, 255, 255], .05); l.hairStyle = 'cap'; l.cap = cu.col; l.glasses = false; }

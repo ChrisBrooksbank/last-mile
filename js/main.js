@@ -1,7 +1,7 @@
 'use strict';
 // Frame loop, camera, overlays, HUD, ambient events.
 const hudEl = document.getElementById('hud'), streetEl = document.getElementById('street');
-const STEPS = +(QP.get('speed') || 1);
+const STEPS = Math.round(qNum('speed', 1, 1, 50));
 let last = performance.now(), hudT = 0, ambT = { horn: G.r(20, 50), siren: QP.has('siren') ? 8 : G.r(60, 140), merch: QP.has('merch') ? 9 : G.r(220, 460), bird: 6, chat: G.r(40, 80) }, streetShown = '';
 
 function updateCamera(dt) {
@@ -107,7 +107,7 @@ function frame(now) {
 // ---------- boot ----------
 resize();
 {
-  const d0 = QP.get('d') || G.p(Object.keys(DISTRICTS)); nav.district = d0;
+  const d0 = Object.prototype.hasOwnProperty.call(DISTRICTS, QP.get('d')) ? QP.get('d') : G.p(Object.keys(DISTRICTS)); nav.district = d0;
   const first = mkPlan(d0, 'S', ''); first.signal = false;
   loadStreet(first);
   R.z = 30; R.v = 6;
@@ -115,7 +115,7 @@ resize();
   mainGen = mainStory();
 }
 document.getElementById('go').addEventListener('click', () => {
-  Snd.start(); document.getElementById('intro').classList.add('gone');
+  Snd.start(); shiftStarted = true; document.getElementById('intro').classList.add('gone');
 });
 window.addEventListener('keydown', e => {
   if (e.key === 'm' || e.key === 'M') { Snd.start(); const m = Snd.toggleMute(); document.getElementById('mute').textContent = m ? 'Sound off' : 'Sound on'; }
