@@ -4,6 +4,7 @@
 
 ### *an endless night shift as a London delivery rider, seen over the handlebars*
 
+[![live demo](https://img.shields.io/badge/live-demo-ff5a5f?style=flat-square)](https://last-mile-london-ride.netlify.app/)
 ![no build](https://img.shields.io/badge/build-none-1fbf8f?style=flat-square)
 ![dependencies](https://img.shields.io/badge/dependencies-0-1fbf8f?style=flat-square)
 ![audio](https://img.shields.io/badge/audio-100%25%20synthesised-ff5a5f?style=flat-square)
@@ -14,6 +15,8 @@
 
 **The rain's coming in sideways off Wardour Street. The phone pings. £4.15 for 1.3 miles.**
 **Go on then.**
+
+### [▶ Watch the shift live: last-mile-london-ride.netlify.app](https://last-mile-london-ride.netlify.app/)
 
 </div>
 
